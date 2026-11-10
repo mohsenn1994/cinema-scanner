@@ -1,0 +1,10 @@
+node_modules/
+.browser-profile*/
+state/
+.secrets.json
+.scan-status.json
+.*.lock
+catalog.json
+data.json
+report.html
+scan.log

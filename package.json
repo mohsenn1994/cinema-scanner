@@ -1,0 +1,18 @@
+{
+  "name": "seat-finder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live showtimes and seats across VOX, Scene and Premiere (Egypt)",
+  "main": "scan.js",
+  "scripts": {
+    "start": "node settings.js",
+    "quick": "node scan.js --quick",
+    "seats": "node scan.js --seats",
+    "scan": "node scan.js",
+    "discover": "node scan.js --discover",
+    "login": "node scan.js login"
+  },
+  "dependencies": {
+    "playwright": "1.55.0"
+  }
+}

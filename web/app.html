@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seat Finder</title>
+<meta name="description" content="Live showtimes and seats across VOX, Scene and Premiere cinemas in Cairo.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='9' width='26' height='17' rx='4' fill='%23c2185b'/%3E%3Crect x='7' y='5' width='18' height='8' rx='3' fill='%23c2185b'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5f4f2;--surface:#fff;--surface-2:#faf9f7;--ink:#17161a;--ink-2:#4a4850;--muted:#77737d;--line:#e6e3df;--line-2:#d6d2cc;
+  --accent:#c2185b;--accent-ink:#fff;--accent-soft:#fbe7ef;
+  --ok:#17803d;--ok-soft:#e3f4e8;--warn:#b45309;--warn-soft:#fdf0dc;--bad:#b42318;--bad-soft:#fde9e7;
+  --seat-free:#22a05a;--seat-prem:#c9971c;--seat-taken:#d9d5cf;--seat-best:#c2185b;
+  --vox:#1d4ed8;--scene:#7c3aed;--premiere:#b45309;
+  --radius:12px;--shadow:0 1px 2px rgba(20,18,24,.05),0 2px 8px rgba(20,18,24,.04);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111013;--surface:#1a191d;--surface-2:#201f24;--ink:#eeedf1;--ink-2:#c4c1ca;--muted:#8f8b96;--line:#2c2a31;--line-2:#3a3840;
+  --accent:#ef4f8b;--accent-ink:#1a0a11;--accent-soft:#3a1626;
+  --ok:#4ade80;--ok-soft:#14301f;--warn:#f59e0b;--warn-soft:#3a2a10;--bad:#f87171;--bad-soft:#3a1714;
+  --seat-free:#34c472;--seat-prem:#e0b33a;--seat-taken:#3b3940;--seat-best:#ef4f8b;
+  --vox:#60a5fa;--scene:#a78bfa;--premiere:#f59e0b;--shadow:none;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+button,input,select{font:inherit;color:inherit}
+a{color:inherit}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .in{max-width:1320px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:17px;letter-spacing:-.01em;margin-right:auto;white-space:nowrap}
+.brand svg{flex:none}
+.live{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.dot.stale{background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.dot.off{background:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:7px 12px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn .n{background:var(--accent);color:var(--accent-ink);border-radius:999px;font-size:11px;padding:0 6px;line-height:17px}
+.hide-sm{}
+@media (max-width:640px){.hide-sm{display:none!important}.live .txt{display:none}}
+
+/* layout */
+.layout{max-width:1320px;margin:0 auto;padding:16px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+
+/* filters */
+.filters{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.filters header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.filters header h2{margin:0;font-size:15px}
+.linkbtn{background:none;border:0;padding:2px 4px;color:var(--accent);font-weight:600;font-size:13px;cursor:pointer}
+.fsec{border-top:1px solid var(--line);padding:12px 16px}
+.fsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-weight:650;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2)}
+.fsec>summary::-webkit-details-marker{display:none}
+.fsec>summary .sel{font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent);font-size:12px}
+.fsec .body{margin-top:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{text-align:left;border:1px solid var(--line-2);background:var(--surface);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.3}
+.chip:hover{border-color:var(--ink-2)}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.chip .c{font-size:11px;opacity:.6;font-variant-numeric:tabular-nums}
+.chip:disabled{opacity:.4;cursor:default}
+.chip .st{width:7px;height:7px;border-radius:50%;flex:none}
+.st.on-sale{background:var(--ok)}.st.listed{background:var(--warn)}.st.coming-soon{background:var(--line-2)}
+.chain{margin:4px 0 10px}
+.chain-h{display:flex;align-items:center;gap:8px;font-weight:650;font-size:13px;margin-bottom:4px}
+.check{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:14px;cursor:pointer;border-radius:6px}
+.check:hover{background:var(--surface-2)}
+.check input{width:16px;height:16px;accent-color:var(--accent);margin:0;flex:none}
+.check .c{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.seatico{color:var(--muted);vertical-align:-2px}
+.tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 6px;border-radius:4px;color:#fff;line-height:1.2;vertical-align:1px}
+.tag.vox{background:var(--vox)}.tag.scene{background:var(--scene)}.tag.premiere{background:var(--premiere)}
+@media (prefers-color-scheme:dark){.tag{color:#111}}
+.row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:10px;overflow:hidden}
+.stepper button{border:0;background:var(--surface);width:34px;height:32px;cursor:pointer;font-size:16px}
+.stepper output{min-width:28px;text-align:center;font-weight:700}
+.toggle{display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;padding:4px 0}
+.toggle input{appearance:none;width:36px;height:22px;border-radius:999px;background:var(--line-2);position:relative;cursor:pointer;flex:none;margin:0;transition:background .15s}
+.toggle input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.toggle input:checked{background:var(--accent)}.toggle input:checked::after{transform:translateX(14px)}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+.small{font-size:12px}.muted{color:var(--muted)}
+
+/* mobile drawer */
+.fbtn{display:none}
+.scrim{display:none}
+@media (max-width:900px){
+  .fbtn{display:inline-flex}
+  .filters{position:fixed;inset:auto 0 0 0;top:auto;max-height:86vh;border-radius:16px 16px 0 0;z-index:40;transform:translateY(105%);transition:transform .2s ease;padding-bottom:env(safe-area-inset-bottom)}
+  .filters.open{transform:none}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:39;display:none}
+  .scrim.open{display:block}
+  .filters .done{display:block!important}
+}
+.filters .done{display:none;position:sticky;bottom:0;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line)}
+.filters .done .btn{width:100%;justify-content:center}
+
+/* results */
+.summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 12px}
+.summary h1{font-size:20px;margin:0;letter-spacing:-.01em}
+.summary .meta{color:var(--muted);font-size:14px}
+.summary .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.summary select{border:1px solid var(--line-2);border-radius:10px;padding:6px 10px;background:var(--surface)}
+.banner{border-radius:var(--radius);padding:12px 14px;margin:0 0 12px;display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.banner.warn{background:var(--warn-soft);color:var(--ink)}
+.banner.info{background:var(--accent-soft)}
+.banner b{display:block}
+.day{margin:0 0 18px}
+.dayh{position:sticky;top:56px;z-index:5;background:var(--bg);padding:8px 0 6px;display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.dayh h2{margin:0;font-size:16px}
+.dayh span{color:var(--muted);font-size:13px}
+.list{display:flex;flex-direction:column;gap:8px}
+.show{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.show.new{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.show .main{display:grid;grid-template-columns:86px minmax(0,1fr) 170px auto;gap:14px;align-items:center;padding:12px 14px}
+.show .time{font-size:20px;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.show .time small{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0}
+.show .what{min-width:0}
+.show .movie{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.show .where{color:var(--ink-2);font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px}
+.badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--ink);color:var(--bg);white-space:nowrap}
+.badge.f3d{background:var(--accent);color:var(--accent-ink)}
+.badge.newb{background:var(--accent);color:var(--accent-ink)}
+.avail{font-size:13px}
+.avail .bar{height:6px;border-radius:999px;background:var(--seat-taken);overflow:hidden;margin-top:5px}
+.avail .bar i{display:block;height:100%;border-radius:999px;background:var(--seat-free)}
+.avail.low .bar i{background:var(--warn)}.avail.crit .bar i{background:var(--bad)}
+.avail b{font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:12px;font-weight:650;padding:3px 9px;border-radius:999px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.wait{background:var(--surface-2);color:var(--muted);border:1px dashed var(--line-2)}
+.acts{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.acts .btn{padding:8px 14px}
+.exp{border:0;background:none;cursor:pointer;width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.exp:hover{background:var(--surface-2)}
+.exp svg{transition:transform .15s}.exp[aria-expanded=true] svg{transform:rotate(180deg)}
+@media (max-width:640px){
+  .show .main{grid-template-columns:64px minmax(0,1fr);gap:8px 12px}
+  .show .time{font-size:18px}
+  .show .avail{grid-column:2}
+  .show .acts{grid-column:1 / -1;justify-content:stretch}
+  .show .acts .btn.primary{flex:1;justify-content:center}
+}
+.detail{border-top:1px solid var(--line);padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px}
+@media (max-width:700px){.detail{grid-template-columns:minmax(0,1fr)}}
+.map{overflow-x:auto;padding:4px 0 6px}
+.screen{margin:0 auto 12px;width:72%;height:16px;border-top:3px solid var(--line-2);border-radius:50% 50% 0 0/14px 14px 0 0;text-align:center;font-size:10px;letter-spacing:.35em;color:var(--muted);padding-top:2px}
+.seats{display:inline-flex;flex-direction:column;gap:3px;min-width:100%;align-items:center}
+.srow{display:flex;gap:3px;align-items:center}
+.srow b{width:16px;font-size:10px;color:var(--muted);text-align:center;font-weight:600}
+.s{width:11px;height:11px;border-radius:3px 3px 2px 2px;flex:none;background:var(--seat-taken)}
+.s.g{background:transparent}
+.s.f{background:var(--seat-free)}.s.p{background:var(--seat-prem)}
+.s.b{background:var(--seat-best);outline:2px solid var(--seat-best);outline-offset:1px}
+@media (min-width:1100px){.s{width:13px;height:13px}}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:10px;justify-content:center}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.facts{font-size:13px;display:flex;flex-direction:column;gap:8px}
+.facts .k{color:var(--muted);font-size:12px}
+.facts ul{margin:2px 0 0;padding-left:16px}
+.best{font-weight:700;color:var(--accent)}
+.empty{background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--radius);padding:28px;text-align:center;color:var(--ink-2)}
+.empty h3{margin:0 0 6px;color:var(--ink)}
+.more{display:flex;justify-content:center;margin:8px 0 20px}
+footer{max-width:1320px;margin:0 auto;padding:10px 16px 40px;color:var(--muted);font-size:12px}
+
+/* dialog */
+dialog{border:1px solid var(--line);border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);background:var(--surface);color:var(--ink);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog .dh{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 6px}
+dialog h3{margin:0;font-size:17px}
+dialog .db{padding:6px 18px 18px;font-size:14px}
+dialog ol{padding-left:18px;margin:8px 0}
+dialog code{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;opacity:0;transition:all .2s;z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="11" width="26" height="15" rx="4" fill="var(--accent)"/><rect x="7" y="5" width="18" height="9" rx="3" fill="var(--accent)" opacity=".75"/></svg>Seat Finder</div>
+  <div class="live" id="live"><span class="dot"></span><span class="txt">Loading…</span></div>
+  <button class="btn fbtn" id="openFilters" type="button">Filters <span class="n" id="fcount" hidden></span></button>
+  <button class="btn hide-sm" id="shareBtn" type="button" title="Copy a link with these filters">Share</button>
+  <button class="btn" id="alertBtn" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="hide-sm">Alerts</span></button>
+</div></div>
+
+<div class="layout">
+  <aside class="filters" id="filters" aria-label="Filters">
+    <header><h2>Filters</h2><button class="linkbtn" id="reset" type="button">Reset</button></header>
+    <div id="facets"></div>
+    <div class="done"><button class="btn primary" id="closeFilters" type="button">Show results</button></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <main>
+    <div class="summary">
+      <h1 id="title">Showtimes</h1>
+      <span class="meta" id="meta"></span>
+      <div class="right">
+        <label class="sr" for="sort">Sort</label>
+        <select id="sort"><option value="time">By date &amp; time</option><option value="seats">Most seats free</option></select>
+      </div>
+    </div>
+    <div id="banners"></div>
+    <div id="results"></div>
+  </main>
+</div>
+<footer>Showtimes and seats are read from the VOX, Scene and Premiere websites and may lag by a few minutes. Not affiliated with any cinema. Book and pay on the cinema's own site.</footer>
+
+<dialog id="alertDlg">
+  <div class="dh"><h3>Get alerted the moment tickets go on sale</h3><button class="btn ghost" type="button" data-close aria-label="Close">✕</button></div>
+  <div class="db" id="alertBody"></div>
+</dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+'use strict';
+var SOURCE = /*__SOURCE__*/null;
+var INLINE = /*__DATA__*/null;
+var CHAINS = ['vox', 'scene', 'premiere'];
+var CHAIN_LABEL = { vox: 'VOX', scene: 'Scene', premiere: 'Premiere' };
+var SLOTS = [
+  { id: 'morning', label: 'Morning', hint: 'before 12', test: function (k) { return k < 720; } },
+  { id: 'afternoon', label: 'Afternoon', hint: '12–5', test: function (k) { return k >= 720 && k < 1020; } },
+  { id: 'evening', label: 'Evening', hint: '5–9', test: function (k) { return k >= 1020 && k < 1260; } },
+  { id: 'night', label: 'Night', hint: '9–12', test: function (k) { return k >= 1260 && k < 1440; } },
+  { id: 'late', label: 'After midnight', hint: '', test: function (k) { return k >= 1440; } }
+];
+var PAGE = 120;
+var SEATICON = '<svg class="seatico" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-label="Seat maps tracked"><path d="M6 4h12a2 2 0 0 1 2 2v6H4V6a2 2 0 0 1 2-2Zm-3 9h18a1 1 0 0 1 1 1v3h-2v3h-2v-3H6v3H4v-3H2v-3a1 1 0 0 1 1-1Z"/></svg>';
+
+var D = null;            // data
+var F = defaults();      // filters
+var expanded = {};       // uid → open
+var limit = PAGE;
+var seenKey = 'sf-seen-v1';
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+var store = {
+  get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+function defaults() { return { m: [], c: [], s: [], f: [], d: [], slot: [], t: [], n: 2, sale: false, seatsOnly: false, sort: 'time' }; }
+function dayLabel(iso) {
+  var d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(',', '');
+}
+function dayLong(iso) {
+  var d = new Date(iso + 'T12:00:00Z');
+  var today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+  var tmr = new Date(Date.parse(today + 'T12:00:00Z') + 864e5).toISOString().slice(0, 10);
+  var base = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  return iso === today ? 'Today · ' + base : iso === tmr ? 'Tomorrow · ' + base : base;
+}
+function ago(iso) {
+  if (!iso) return 'never';
+  var s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + ' min ago';
+  if (s < 86400) return Math.round(s / 3600) + ' h ago';
+  return Math.round(s / 86400) + ' d ago';
+}
+function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(function () { t.classList.remove('on'); }, 2200); }
+var cinemaKey = function (c) { return c.chain + ':' + c.name; };
+
+/* ---------- filters ↔ URL ---------- */
+function readHash() {
+  var h = location.hash.replace(/^#/, '');
+  if (!h) return null;
+  var f = defaults();
+  h.split('&').forEach(function (p) {
+    var kv = p.split('='), k = kv[0], v = decodeURIComponent(kv[1] || '');
+    if (['m', 'c', 's', 'f', 'd', 'slot', 't'].indexOf(k) >= 0) f[k] = v ? v.split('|') : [];
+    if (k === 'n') f.n = Math.max(1, Math.min(10, Number(v) || 2));
+    if (k === 'sale') f.sale = v === '1';
+    if (k === 'seats') f.seatsOnly = v === '1';
+    if (k === 'sort') f.sort = v === 'seats' ? 'seats' : 'time';
+  });
+  return f;
+}
+function writeHash() {
+  var parts = [];
+  ['m', 'c', 's', 'f', 'd', 'slot', 't'].forEach(function (k) { if (F[k].length) parts.push(k + '=' + encodeURIComponent(F[k].join('|'))); });
+  if (F.n !== 2) parts.push('n=' + F.n);
+  if (F.sale) parts.push('sale=1');
+  if (F.seatsOnly) parts.push('seats=1');
+  if (F.sort !== 'time') parts.push('sort=' + F.sort);
+  var h = parts.length ? '#' + parts.join('&') : '';
+  if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
+  store.set('sf-filters', JSON.stringify(F));
+}
+
+/* ---------- data loading ---------- */
+function fetchData() {
+  if (SOURCE && SOURCE.type === 'inline') return Promise.resolve(INLINE);
+  if (SOURCE && SOURCE.type === 'url') return fetch(SOURCE.url + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+  if (SOURCE && SOURCE.type === 'github') {
+    var api = 'https://api.github.com/repos/' + SOURCE.owner + '/' + SOURCE.repo + '/contents/data.json?ref=' + encodeURIComponent(SOURCE.branch);
+    var raw = 'https://raw.githubusercontent.com/' + SOURCE.owner + '/' + SOURCE.repo + '/' + encodeURIComponent(SOURCE.branch) + '/data.json?t=' + Date.now();
+    // The API is always fresh (60 requests/hour per visitor); raw is cached for ~5 min but has no limit.
+    var useRaw = Number(store.get('sf-rl') || 0) > Date.now();
+    var go = useRaw ? fetch(raw, { cache: 'no-store' }) : fetch(api, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' });
+    return go.then(function (r) {
+      if (!useRaw && (r.status === 403 || r.status === 429)) {
+        store.set('sf-rl', String(Date.now() + 15 * 60000));
+        return fetch(raw, { cache: 'no-store' }).then(function (x) { return x.json(); });
+      }
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+  }
+  return fetch('data.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); });
+}
+
+var prevBookable = null;
+function load(first) {
+  return fetchData().then(function (data) {
+    if (!data || !data.shows) throw new Error('no data');
+    var was = prevBookable;
+    D = data;
+    prevBookable = {};
+    D.shows.forEach(function (s) { if (s.b) prevBookable[s.u] = 1; });
+    markNew();
+    if (was) notifyNew(was);
+    if (first) initFilters();
+    render();
+  }).catch(function (e) {
+    setLive('off', 'Can’t load data');
+    if (first) $('results').innerHTML = '<div class="empty"><h3>Couldn’t load showtimes</h3><p>' + esc(e.message || e) + '. Try again in a minute.</p></div>';
+  });
+}
+
+/* "New" = became bookable since this browser last looked (kept for 6 h). */
+var newSet = {};
+function markNew() {
+  var seen = {}, now = Date.now();
+  try { seen = JSON.parse(store.get(seenKey) || '{}'); } catch (e) {}
+  var init = Number(store.get('sf-seen-init') || 0);
+  if (!init) { init = now; store.set('sf-seen-init', String(now)); }
+  newSet = {};
+  var live = {};
+  D.shows.forEach(function (s) {
+    if (!s.b) return;
+    live[s.u] = 1;
+    if (!seen[s.u]) seen[s.u] = now;
+    // NEW for 30 min after this browser first saw it on sale (not on your very first visit).
+    if (seen[s.u] > init + 60000 && now - seen[s.u] < 30 * 60000) newSet[s.u] = 1;
+  });
+  Object.keys(seen).forEach(function (k) { if (!live[k] && now - seen[k] > 86400000) delete seen[k]; });
+  store.set(seenKey, JSON.stringify(seen));
+}
+
+function notifyNew(was) {
+  if (store.get('sf-notify') !== '1' || !('Notification' in window) || Notification.permission !== 'granted') return;
+  var fresh = D.shows.filter(function (s) { return s.b && !was[s.u] && matches(s, null); });
+  if (!fresh.length) return;
+  var s = fresh[0], c = D.cinemas[s.c];
+  var n = new Notification(D.movies[s.m].name + ': ' + s.s + ' on sale', {
+    body: c.chainLabel + ' ' + c.name + ' · ' + dayLabel(s.d) + ' ' + s.t + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ' more)' : ''),
+    tag: 'sf-' + s.u
+  });
+  n.onclick = function () { window.focus(); if (fresh.length === 1) window.open(s.url, '_blank'); };
+}
+
+function setLive(kind, text) {
+  var el = $('live');
+  el.querySelector('.dot').className = 'dot' + (kind ? ' ' + kind : '');
+  el.querySelector('.txt').textContent = text;
+  el.title = text;
+}
+function updateLive() {
+  if (!D) return;
+  var age = (Date.now() - Date.parse(D.quickAt || D.generatedAt)) / 60000;
+  if (age > 20) setLive('off', 'Scanner offline · last check ' + ago(D.quickAt || D.generatedAt));
+  else if (age > 6) setLive('stale', 'Checked ' + ago(D.quickAt));
+  else setLive('', 'Live · checked ' + ago(D.quickAt));
+}
+
+/* ---------- filtering ---------- */
+function showMatches(s, except) {
+  var c = D.cinemas[s.c], m = D.movies[s.m];
+  if (except !== 'm' && F.m.length && F.m.indexOf(m.name) < 0) return false;
+  if (except !== 'c' && F.c.length && F.c.indexOf(cinemaKey(c)) < 0) return false;
+  if (except !== 's' && F.s.length && F.s.indexOf(s.s) < 0) return false;
+  if (except !== 'f' && F.f.length && F.f.indexOf(s.f) < 0) return false;
+  if (except !== 'd' && F.d.length && F.d.indexOf(s.d) < 0) return false;
+  if (except !== 'slot' && except !== 't') {
+    if (F.slot.length || F.t.length) {
+      var inSlot = F.slot.some(function (id) { return SLOTS.filter(function (x) { return x.id === id; })[0].test(s.k); });
+      var inTime = F.t.indexOf(s.t) >= 0;
+      if (!inSlot && !inTime) return false;
+    }
+  }
+  if (F.sale && !s.b) return false;
+  if (F.seatsOnly && !(s.seat && bestBlock(s.seat, F.n))) return false;
+  return true;
+}
+function matches(s, except) { return showMatches(s, except); }
+
+/* ---------- best seats (same scoring as the scanner) ---------- */
+var bestCache = {};
+function bestBlock(seat, n) {
+  var key = seat.at + '|' + n + '|' + seat.rows.length + seat.free;
+  if (bestCache[key] !== undefined) return bestCache[key];
+  var rows = seat.rows, width = 0, cols = [], best = null;
+  rows.forEach(function (r) { width = Math.max(width, r.c.length); for (var i = 0; i < r.c.length; i++) if (r.c[i] !== ' ') cols.push(i); });
+  var center = cols.reduce(function (a, b) { return a + b; }, 0) / (cols.length || 1);
+  rows.forEach(function (r, ri) {
+    var depth = rows.length > 1 ? ri / (rows.length - 1) : .5;
+    for (var ci = 0; ci + n <= r.c.length; ci++) {
+      var ok = true;
+      for (var j = 0; j < n; j++) { var ch = r.c[ci + j]; if (ch !== '1' && ch !== 'v') { ok = false; break; } }
+      if (!ok) continue;
+      var score = Math.abs(ci + (n - 1) / 2 - center) / Math.max(width, 1) + 1.2 * Math.abs(depth - .65);
+      if (!best || score < best.score) best = { score: score, row: ri, col: ci };
+    }
+  });
+  if (best) {
+    var r = rows[best.row], nums = r.n.split(','), idx = 0, labels = [];
+    for (var i = 0; i < r.c.length; i++) { if (r.c[i] === ' ') continue; if (i >= best.col && i < best.col + n) labels.push(r.r + '-' + nums[idx]); idx++; }
+    best.labels = labels;
+  }
+  bestCache[key] = best;
+  return best;
+}
+
+/* ---------- facets ---------- */
+function count(except, test) {
+  var n = 0;
+  for (var i = 0; i < D.shows.length; i++) { var s = D.shows[i]; if (test(s) && showMatches(s, except)) n++; }
+  return n;
+}
+function chip(group, value, label, extra, pressed, disabled) {
+  return '<button type="button" class="chip" data-g="' + group + '" data-v="' + esc(value) + '" aria-pressed="' + (pressed ? 'true' : 'false') + '"' + (disabled ? ' disabled' : '') + '>' + label + (extra || '') + '</button>';
+}
+function section(id, title, sel, body, open) {
+  return '<details class="fsec" data-sec="' + id + '"' + (open ? ' open' : '') + '><summary>' + title + (sel ? '<span class="sel">' + sel + '</span>' : '') + '</summary><div class="body">' + body + '</div></details>';
+}
+var openSecs = null;
+function renderFacets() {
+  if (!openSecs) openSecs = { movies: 1, cinemas: 1, screens: 1, format: 0, dates: 1, times: 1, seats: 1 };
+  var html = '';
+
+  // Movies
+  var mv = D.movies.map(function (m) {
+    var n = count('m', function (s) { return D.movies[s.m] === m; });
+    var st = { 'on-sale': 'On sale', listed: 'Listed', 'coming-soon': 'Not on sale yet' }[m.status];
+    return chip('m', m.name, '<span class="st ' + m.status + '" title="' + st + '"></span>' + esc(m.name), ' <span class="c">' + n + '</span>', F.m.indexOf(m.name) >= 0);
+  }).join('');
+  var soon = (D.comingSoon || []).slice(0, 12).map(function (m) { return esc(m.title); }).join(', ');
+  html += section('movies', 'Movies', F.m.length ? F.m.length + ' selected' : 'All', '<div class="chips">' + mv + '</div>' +
+    '<p class="hint"><span class="st on-sale" style="display:inline-block;width:7px;height:7px;border-radius:50%"></span> on sale · <span class="st listed" style="display:inline-block;width:7px;height:7px;border-radius:50%"></span> listed, not on sale · <span class="st coming-soon" style="display:inline-block;width:7px;height:7px;border-radius:50%"></span> not on sale yet</p>' +
+    (soon ? '<p class="hint">Coming soon (not tracked): ' + soon + '</p>' : ''), openSecs.movies);
+
+  // Cinemas
+  var cin = CHAINS.map(function (ch) {
+    var list = D.cinemas.filter(function (c) { return c.chain === ch; });
+    if (!list.length) return '';
+    list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var keys = list.map(cinemaKey), on = keys.filter(function (k) { return F.c.indexOf(k) >= 0; }).length;
+    var head = '<label class="check chain-h"><input type="checkbox" data-chain="' + ch + '"' + (on === keys.length ? ' checked' : '') + (on && on < keys.length ? ' data-mixed="1"' : '') + '> <span class="tag ' + ch + '">' + CHAIN_LABEL[ch] + '</span> All ' + CHAIN_LABEL[ch] + '</label>';
+    var items = list.map(function (c) {
+      var n = count('c', function (s) { return D.cinemas[s.c] === c; });
+      return '<label class="check"><input type="checkbox" data-g="c" data-v="' + esc(cinemaKey(c)) + '"' + (F.c.indexOf(cinemaKey(c)) >= 0 ? ' checked' : '') + '> ' + esc(c.name) +
+        (c.seats ? ' <span title="Live seat maps">' + SEATICON + '</span>' : '') + '<span class="c">' + n + '</span></label>';
+    }).join('');
+    return '<div class="chain">' + head + items + '</div>';
+  }).join('');
+  html += section('cinemas', 'Cinemas', F.c.length ? F.c.length + ' selected' : 'All', cin + '<p class="hint">' + SEATICON + ' live seat maps. Other cinemas show times and booking links.</p>', openSecs.cinemas);
+
+  // Screens
+  var screens = D.screens.slice().sort(function (a, b) { var p = /standard|regular|2d/i; return (p.test(a) - p.test(b)) || a.localeCompare(b); });
+  html += section('screens', 'Screens', F.s.length ? F.s.length + ' selected' : 'All', '<div class="chips">' + screens.map(function (s) {
+    var n = count('s', function (x) { return x.s === s; });
+    return chip('s', s, esc(s), ' <span class="c">' + n + '</span>', F.s.indexOf(s) >= 0, !n && F.s.indexOf(s) < 0);
+  }).join('') + '</div>', openSecs.screens);
+
+  // 2D / 3D
+  var fmts = ['2D', '3D'].concat(uniq(D.shows.map(function (s) { return s.f; })).filter(function (f) { return f !== '2D' && f !== '3D'; }));
+  html += section('format', '2D / 3D', F.f.length ? F.f.join(', ') : 'Both', '<div class="chips">' + fmts.map(function (f) {
+    var n = count('f', function (x) { return x.f === f; });
+    return chip('f', f, f, ' <span class="c">' + n + '</span>', F.f.indexOf(f) >= 0, !n && F.f.indexOf(f) < 0);
+  }).join('') + '</div>', openSecs.format || F.f.length);
+
+  // Dates
+  var dates = uniq(D.shows.map(function (s) { return s.d; })).sort();
+  html += section('dates', 'Dates', F.d.length ? F.d.length + ' selected' : 'All dates', '<div class="chips">' + dates.map(function (d) {
+    var n = count('d', function (x) { return x.d === d; });
+    return chip('d', d, esc(dayLabel(d)), ' <span class="c">' + n + '</span>', F.d.indexOf(d) >= 0, !n && F.d.indexOf(d) < 0);
+  }).join('') + '</div><p class="hint">Every date the cinemas have published is scanned. Leave empty for all.</p>', openSecs.dates);
+
+  // Times
+  var slotHtml = SLOTS.map(function (sl) {
+    var n = count('slot', function (x) { return sl.test(x.k); });
+    return chip('slot', sl.id, esc(sl.label) + (sl.hint ? ' <span class="c">' + sl.hint + '</span>' : ''), '', F.slot.indexOf(sl.id) >= 0, !n && F.slot.indexOf(sl.id) < 0);
+  }).join('');
+  var times = {};
+  D.shows.forEach(function (s) { if (showMatches(s, 't')) times[s.t] = s.k; });
+  F.t.forEach(function (t) { if (times[t] === undefined) times[t] = 9999; });
+  var timeHtml = Object.keys(times).sort(function (a, b) { return times[a] - times[b]; }).map(function (t) { return chip('t', t, esc(t), '', F.t.indexOf(t) >= 0); }).join('');
+  html += section('times', 'Times', (F.slot.length + F.t.length) ? (F.slot.length + F.t.length) + ' selected' : 'Any time',
+    '<div class="chips">' + slotHtml + '</div><p class="hint" style="margin:10px 0 6px">Or exact start times:</p><div class="chips">' + (timeHtml || '<span class="small muted">No times for these filters.</span>') + '</div>', openSecs.times);
+
+  // Seats
+  html += section('seats', 'Seats', '', '<div class="row2"><span>Seats together</span><span class="stepper"><button type="button" data-step="-1" aria-label="Fewer">−</button><output id="nOut">' + F.n + '</output><button type="button" data-step="1" aria-label="More">+</button></span></div>' +
+    '<label class="toggle" style="margin-top:10px"><input type="checkbox" id="saleT"' + (F.sale ? ' checked' : '') + '> On sale only</label>' +
+    '<label class="toggle"><input type="checkbox" id="seatsT"' + (F.seatsOnly ? ' checked' : '') + '> Only where ' + F.n + ' seats together are free</label>' +
+    '<p class="hint">The best ' + F.n + ' together are highlighted on each seat map.</p>', openSecs.seats);
+
+  // Re-rendering replaces the controls; put keyboard focus back where it was.
+  var a = document.activeElement, fk = a && a.closest && a.closest('#facets') ? { g: a.dataset.g, v: a.dataset.v, chain: a.dataset.chain, id: a.id, step: a.dataset.step } : null;
+  $('facets').innerHTML = html;
+  if (fk) {
+    var sel = fk.id ? '#' + fk.id : fk.chain ? '[data-chain="' + fk.chain + '"]' : fk.step ? '[data-step="' + fk.step + '"]' : fk.g ? '[data-g="' + fk.g + '"][data-v="' + (window.CSS && CSS.escape ? CSS.escape(fk.v) : fk.v) + '"]' : null;
+    var el = sel && document.querySelector('#facets ' + sel);
+    if (el) el.focus({ preventScroll: true });
+  }
+  [].forEach.call(document.querySelectorAll('[data-mixed]'), function (el) { el.indeterminate = true; });
+  var n = F.m.length + F.c.length + F.s.length + F.f.length + F.d.length + F.slot.length + F.t.length + (F.sale ? 1 : 0) + (F.seatsOnly ? 1 : 0);
+  $('fcount').hidden = !n; $('fcount').textContent = n;
+}
+function uniq(a) { var o = {}, r = []; a.forEach(function (x) { if (!o[x]) { o[x] = 1; r.push(x); } }); return r; }
+
+/* ---------- results ---------- */
+function seatMapHtml(s) {
+  var best = bestBlock(s.seat, F.n), rows = s.seat.rows;
+  var html = '<div class="map"><div class="screen">SCREEN</div><div class="seats">';
+  rows.forEach(function (r, ri) {
+    html += '<div class="srow"><b>' + esc(r.r) + '</b>';
+    var nums = r.n.split(','), idx = 0;
+    for (var i = 0; i < r.c.length; i++) {
+      var ch = r.c[i];
+      if (ch === ' ') { html += '<i class="s g"></i>'; continue; }
+      var label = r.r + '-' + nums[idx++];
+      var isBest = best && best.row === ri && i >= best.col && i < best.col + F.n;
+      var cls = isBest ? 'b' : ch === '1' ? 'f' : ch === 'v' ? 'p' : '';
+      html += '<i class="s ' + cls + '" title="' + esc(label) + (ch === '0' || ch === 'w' ? ' · taken' : '') + '"></i>';
+    }
+    html += '<b>' + esc(r.r) + '</b></div>';
+  });
+  html += '</div><div class="legend"><span><i class="s f"></i>Free</span><span><i class="s p"></i>Premium free</span><span><i class="s"></i>Taken</span><span><i class="s b"></i>Best ' + F.n + ' together</span></div></div>';
+  return html;
+}
+function availHtml(s) {
+  if (!s.b) return '<div><span class="pill wait">Not on sale yet</span></div>';
+  if (!s.seat) return '<div><span class="pill ok">On sale</span></div>';
+  var pct = s.seat.total ? s.seat.free / s.seat.total : 0;
+  return '<div class="avail' + (pct < .15 ? ' crit' : pct < .5 ? ' low' : '') + '"><b>' + s.seat.free + '</b> of ' + s.seat.total + ' free<div class="bar"><i style="width:' + Math.round(pct * 100) + '%"></i></div></div>';
+}
+function showHtml(s) {
+  var c = D.cinemas[s.c], m = D.movies[s.m], open = !!expanded[s.u];
+  var book = s.b ? '<a class="btn primary" href="' + esc(s.url) + '" target="_blank" rel="noopener" data-book="' + esc(s.u) + '">' + (s.direct ? 'Book' : 'Open on Premiere') + '</a>' :
+    '<a class="btn" href="' + esc(s.url) + '" target="_blank" rel="noopener">View</a>';
+  var detail = '';
+  if (open) {
+    var best = s.seat ? bestBlock(s.seat, F.n) : null;
+    var facts = '<div class="facts">';
+    if (s.seat) {
+      facts += '<div><div class="k">Best ' + F.n + ' together</div>' + (best ? '<span class="best">' + esc(best.labels.join(', ')) + '</span>' : 'No ' + F.n + ' adjacent seats left') + '</div>';
+      facts += '<div><div class="k">Seats</div><ul>' + s.seat.cats.map(function (x) { return '<li>' + esc(x.n) + ': <b>' + x.f + '</b>/' + x.t + (x.p ? ' · ' + esc(x.p) : '') + '</li>'; }).join('') + '</ul></div>';
+      facts += '<div class="k">Seat map from ' + ago(s.seat.at) + '</div>';
+    }
+    if (!s.direct && s.b) facts += '<div><div class="k">On Premiere, choose</div>' + esc(c.name) + ' → ' + esc(dayLabel(s.d)) + ' → ' + esc(s.s) + ' → ' + esc(s.t) + '</div>';
+    facts += '</div>';
+    detail = '<div class="detail">' + (s.seat ? seatMapHtml(s) : '<div class="muted small">' + (c.seats ? 'Seat map coming on the next seat scan.' : 'Seat maps aren’t tracked for this cinema — open it to see seats.') + '</div>') + facts + '</div>';
+  }
+  return '<article class="show' + (newSet[s.u] ? ' new' : '') + '" data-u="' + esc(s.u) + '"><div class="main">' +
+    '<div class="time">' + esc(s.t.replace(' ', ' ')) + (s.k >= 1440 ? '<small>after midnight</small>' : '') + '</div>' +
+    '<div class="what"><div class="movie">' + esc(m.name) + '</div><div class="where"><span class="tag ' + c.chain + '">' + c.chainLabel + '</span>' + esc(c.name) +
+    ' <span class="badge">' + esc(s.s) + '</span>' + (s.f !== '2D' ? '<span class="badge f3d">' + esc(s.f) + '</span>' : '') + (newSet[s.u] ? '<span class="badge newb">NEW</span>' : '') + '</div></div>' +
+    availHtml(s) +
+    '<div class="acts">' + book + '<button type="button" class="exp" data-exp="' + esc(s.u) + '" aria-expanded="' + open + '" aria-label="Seat details"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button></div>' +
+    '</div>' + detail + '</article>';
+}
+function render() {
+  if (!D) return;
+  renderFacets();
+  updateLive();
+  var list = D.shows.filter(function (s) { return showMatches(s, null); });
+  var onSale = list.filter(function (s) { return s.b; }).length;
+  var cinemas = uniq(list.map(function (s) { return s.c; })).length;
+  $('title').textContent = F.m.length === 1 ? F.m[0] : 'Showtimes';
+  $('meta').textContent = list.length + ' showtimes · ' + onSale + ' on sale · ' + cinemas + ' cinema' + (cinemas === 1 ? '' : 's');
+  $('sort').value = F.sort;
+
+  var banners = '';
+  var notYet = D.movies.filter(function (m) { return (!F.m.length || F.m.indexOf(m.name) >= 0) && m.status !== 'on-sale'; });
+  if (notYet.length) banners += '<div class="banner info"><div><b>' + esc(notYet.map(function (m) { return m.name; }).join(', ')) + (notYet.length > 1 ? ' aren’t' : ' isn’t') + ' fully on sale yet.</b>Turn on alerts to hear the second booking opens.</div><button class="btn" type="button" data-open-alerts>Alerts</button></div>';
+  $('banners').innerHTML = banners;
+
+  if (!list.length) {
+    $('results').innerHTML = '<div class="empty"><h3>No showtimes match</h3><p>Try more cinemas or screens, or clear the time filter.</p><button class="btn" type="button" data-reset>Reset filters</button></div>';
+    return;
+  }
+  if (F.sort === 'seats') list.sort(function (a, b) { return ((b.seat ? b.seat.free : b.b ? -1 : -2) - (a.seat ? a.seat.free : a.b ? -1 : -2)) || a.d.localeCompare(b.d) || a.k - b.k; });
+  var shown = list.slice(0, limit), html = '';
+  if (F.sort === 'time') {
+    var day = null;
+    shown.forEach(function (s) {
+      if (s.d !== day) {
+        if (day) html += '</div></section>';
+        day = s.d;
+        var n = list.filter(function (x) { return x.d === day; }).length;
+        html += '<section class="day"><div class="dayh"><h2>' + esc(dayLong(day)) + '</h2><span>' + n + ' showtime' + (n === 1 ? '' : 's') + '</span></div><div class="list">';
+      }
+      html += showHtml(s);
+    });
+    html += '</div></section>';
+  } else {
+    html = '<div class="list">' + shown.map(function (s) { return showHtml(s).replace('<div class="what">', '<div class="what"><div class="small muted">' + esc(dayLabel(s.d)) + '</div>'); }).join('') + '</div>';
+  }
+  if (list.length > limit) html += '<div class="more"><button class="btn" type="button" data-more>Show ' + Math.min(PAGE, list.length - limit) + ' more</button></div>';
+  $('results').innerHTML = html;
+}
+
+/* ---------- alerts dialog ---------- */
+function openAlerts() {
+  var a = D && D.alerts, b = '';
+  if (a) {
+    var url = a.server.replace(/\/$/, '') + '/' + encodeURIComponent(a.topic);
+    b += '<p><b>On your phone (recommended)</b> — works even when this page is closed:</p><ol><li>Install <b>ntfy</b> (App Store / Google Play).</li><li>Tap <b>+</b> and subscribe to <code>' + esc(a.topic) + '</code>' + (/ntfy\.sh$/.test(a.server.replace(/\/$/, '')) ? '' : ' on server <code>' + esc(a.server) + '</code>') + '.</li></ol><p class="small muted">Or open <a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + '</a> to subscribe in the browser.</p><hr style="border:0;border-top:1px solid var(--line);margin:14px 0">';
+  }
+  var supported = 'Notification' in window, on = store.get('sf-notify') === '1' && supported && Notification.permission === 'granted';
+  b += '<p><b>In this browser</b> — while this page is open, for showtimes matching <i>your</i> filters.</p>' +
+    (supported ? '<label class="toggle"><input type="checkbox" id="notifyT"' + (on ? ' checked' : '') + '> Notify me here</label>' : '<p class="small muted">This browser doesn’t support notifications.</p>');
+  b += '<p class="small muted" style="margin-top:14px">Tip: be signed in on VOX, Scene and Premiere with your card saved, so checkout takes seconds.</p>';
+  $('alertBody').innerHTML = b;
+  $('alertDlg').showModal();
+}
+
+/* ---------- events ---------- */
+function toggleIn(arr, v) { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+function changed() { limit = PAGE; writeHash(); render(); }
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-g],[data-step],[data-exp],[data-more],[data-reset],[data-open-alerts],[data-close]');
+  if (!t) return;
+  if (t.dataset.g && t.tagName === 'BUTTON') { toggleIn(F[t.dataset.g], t.dataset.v); changed(); }
+  else if (t.dataset.step) { F.n = Math.max(1, Math.min(10, F.n + Number(t.dataset.step))); bestCache = {}; changed(); }
+  else if (t.dataset.exp) { expanded[t.dataset.exp] = !expanded[t.dataset.exp]; var el = t.closest('.show'); var s = D.shows.filter(function (x) { return x.u === t.dataset.exp; })[0]; el.outerHTML = showHtml(s); }
+  else if (t.hasAttribute('data-more')) { limit += PAGE; render(); }
+  else if (t.hasAttribute('data-reset')) { F = defaults(); changed(); }
+  else if (t.hasAttribute('data-open-alerts')) openAlerts();
+  else if (t.hasAttribute('data-close')) t.closest('dialog').close();
+});
+document.addEventListener('change', function (e) {
+  var t = e.target;
+  if (t.dataset.g === 'c') { toggleIn(F.c, t.dataset.v); changed(); }
+  else if (t.dataset.chain) {
+    var keys = D.cinemas.filter(function (c) { return c.chain === t.dataset.chain; }).map(cinemaKey);
+    var all = keys.every(function (k) { return F.c.indexOf(k) >= 0; });
+    F.c = F.c.filter(function (k) { return keys.indexOf(k) < 0; });
+    if (!all) F.c = F.c.concat(keys);
+    changed();
+  }
+  else if (t.id === 'saleT') { F.sale = t.checked; changed(); }
+  else if (t.id === 'seatsT') { F.seatsOnly = t.checked; changed(); }
+  else if (t.id === 'sort') { F.sort = t.value; changed(); }
+  else if (t.id === 'notifyT') {
+    if (t.checked) Notification.requestPermission().then(function (p) { var ok = p === 'granted'; store.set('sf-notify', ok ? '1' : '0'); t.checked = ok; toast(ok ? 'Notifications on' : 'Notifications blocked by the browser'); });
+    else { store.set('sf-notify', '0'); toast('Notifications off'); }
+  }
+});
+document.addEventListener('toggle', function (e) { var d = e.target; if (d.dataset && d.dataset.sec && openSecs) openSecs[d.dataset.sec] = d.open ? 1 : 0; }, true);
+$('reset').onclick = function () { F = defaults(); changed(); };
+$('alertBtn').onclick = openAlerts;
+$('shareBtn').onclick = function () {
+  writeHash();
+  var url = location.href;
+  if (navigator.share && /Mobi/.test(navigator.userAgent)) navigator.share({ title: 'Seat Finder', url: url }).catch(function () {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { toast('Link copied — it keeps your filters'); });
+  else prompt('Copy this link:', url);
+};
+function drawer(open) { $('filters').classList.toggle('open', open); $('scrim').classList.toggle('open', open); }
+$('openFilters').onclick = function () { drawer(true); };
+$('closeFilters').onclick = function () { drawer(false); };
+$('scrim').onclick = function () { drawer(false); };
+window.addEventListener('hashchange', function () { var h = readHash(); if (h) { F = h; render(); } });
+
+function initFilters() {
+  var h = readHash(), saved = null;
+  try { saved = JSON.parse(store.get('sf-filters') || 'null'); } catch (e) {}
+  F = h || (saved ? Object.assign(defaults(), saved) : defaults());
+}
+
+/* ---------- start ---------- */
+load(true).then(function () {
+  var every = SOURCE && SOURCE.type === 'github' ? 75000 : SOURCE && SOURCE.type === 'inline' ? 0 : 30000;
+  if (every) setInterval(function () { if (!document.hidden) load(false); }, every);
+  else setInterval(function () { if (!document.hidden && !$('alertDlg').open) location.reload(); }, 120000); // report.html: reload to pick up the latest file
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && every) load(false); });
+  setInterval(updateLive, 15000);
+});
+})();
+</script>
+</body>
+</html>

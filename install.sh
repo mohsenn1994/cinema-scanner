@@ -1,12 +1,11 @@
 #!/bin/bash
-# Installs dependencies and sets up three background jobs on macOS (launchd):
-#   showtimes check every 2 min · seat maps every 10 min · the Seat Finder page at http://localhost:4848
+# Installs dependencies and runs the Seat Finder helper in the background (launchd):
+# it serves http://localhost:4848 and does a check whenever someone presses "Check now" or opens a showtime.
+# Nothing is scanned on a schedule.
 set -e
 cd "$(dirname "$0")"
 DIR="$(pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
-QUICK_SEC="${1:-120}"
-SEATS_SEC="${2:-600}"
 
 NODE="$(command -v node || true)"
 if [ -z "$NODE" ]; then
@@ -21,7 +20,7 @@ chmod +x "Seat Finder.command" "Scanner Settings.command" uninstall.sh 2>/dev/nu
 mkdir -p "$AGENTS" state
 
 # Remove jobs from earlier versions.
-for old in com.vox.seat-scanner; do
+for old in com.vox.seat-scanner com.seatfinder.quick com.seatfinder.seats; do
   launchctl unload "$AGENTS/$old.plist" 2>/dev/null || true
   rm -f "$AGENTS/$old.plist"
 done
@@ -54,13 +53,11 @@ write_plist() { # label, interval-or-empty, args...
 }
 
 echo "→ Scheduling…"
-write_plist com.seatfinder.quick "$QUICK_SEC" "$DIR/scan.js" --quick
-write_plist com.seatfinder.seats "$SEATS_SEC" "$DIR/scan.js" --seats
 write_plist com.seatfinder.app "" "$DIR/settings.js" --no-open
 
 echo
-echo "✓ Installed. Showtimes every $QUICK_SEC s, seat maps every $SEATS_SEC s."
-echo "  Seat Finder: http://localhost:4848          (first results in 2–5 minutes)"
+echo "✓ Installed. Nothing runs on a schedule — press Check now on the page."
+echo "  Seat Finder: http://localhost:4848"
 echo "  Settings:    http://localhost:4848/settings  (alerts, sharing on GitHub, what to scan)"
 echo "  Log:         tail -f \"$DIR/scan.log\""
 echo "  Stop:        bash uninstall.sh"

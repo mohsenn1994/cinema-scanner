@@ -62,6 +62,10 @@ const server = http.createServer((req, res) => {
     try {
       const data = body ? JSON.parse(body) : {};
       if (p === '/api/config') return send(res, 200, { config: saveConfig(data) });
+      if (p === '/api/request') {
+        handleRequest(JSON.stringify(data));
+        return send(res, 200, { ok: true });
+      }
       if (p === '/api/scan') {
         const st = readStatus();
         const which = data.which || 'quick';
@@ -88,6 +92,70 @@ const server = http.createServer((req, res) => {
     }
   });
 });
+
+// The web page posts requests to an ntfy topic; this Mac listens and does the work:
+//   {type:'check', id, focus}  → check showtimes everywhere, then count seats for what the person is viewing
+//   {type:'seats', id, uid}    → count seats for one showtime right now
+let lastManual = 0;
+const lastSeat = {};
+function handleRequest(raw) {
+  let req;
+  try {
+    req = JSON.parse(raw);
+  } catch {
+    req = { type: 'check' };
+  }
+  const id = String(req.id || Date.now()).slice(0, 40);
+  if (req.type === 'seats' && req.uid) {
+    if (Date.now() - (lastSeat[req.uid] || 0) < 15000) return;
+    lastSeat[req.uid] = Date.now();
+    console.log(new Date().toISOString(), 'live seats requested', req.uid);
+    return run(['--seat', String(req.uid), '--reply', id]);
+  }
+  const st = readStatus();
+  if ((st.quick || {}).running || Date.now() - lastManual < 45000) return;
+  lastManual = Date.now();
+  console.log(new Date().toISOString(), 'Check now requested from the page');
+  const focus = req.focus ? JSON.stringify(req.focus).slice(0, 2000) : null;
+  run(['--quick', '--reply', id, ...(focus ? ['--focus', focus] : [])]);
+}
+async function listenForCheckNow() {
+  for (;;) {
+    let cfg = loadConfig();
+    if (!cfg.trigger.topic) {
+      cfg = saveConfig({ ...cfg, trigger: { ...cfg.trigger, topic: 'seatfinder-scan-' + crypto.randomBytes(6).toString('hex') } });
+    }
+    try {
+      const res = await fetch(`${cfg.trigger.server.replace(/\/$/, '')}/${encodeURIComponent(cfg.trigger.topic)}/json?since=1m`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i);
+          buf = buf.slice(i + 1);
+          let msg;
+          try {
+            msg = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (msg.event !== 'message') continue;
+          if (Date.now() / 1000 - msg.time > 120) continue; // old request
+          handleRequest(msg.message);
+        }
+      }
+    } catch (e) {
+      /* network blip — reconnect */
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
+listenForCheckNow();
 
 server.listen(PORT, '127.0.0.1', () => {
   const u = `http://localhost:${PORT}`;
@@ -123,14 +191,14 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}bu
 .opts{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
 ol{margin:6px 0;padding-left:20px}code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
 </style></head><body><div class="wrap">
-<h1>Scanner settings</h1><p class="muted">What your Mac scans. Showtimes are checked every 2 minutes; seat maps every 10. <a href="/" target="_blank">Open Seat Finder →</a></p>
+<h1>Scanner settings</h1><p class="muted">What your Mac checks when someone presses <b>Check now</b> on the page (nothing runs on a schedule). Seats are counted live when a showtime is opened. <a href="/" target="_blank">Open Seat Finder →</a></p>
 
 <section><h2>Movies</h2><p class="small muted">Pick each movie's page at every chain, or "not at …". Movies that aren't on sale yet are watched too — you'll get an alert when booking opens.</p>
 <div class="scroll"><table class="movies"><thead><tr><th class="narrow">On</th><th>Name</th><th><span class="tag tag-vox">VOX</span></th><th><span class="tag tag-scene">Scene</span></th><th><span class="tag tag-premiere">Premiere</span></th><th class="narrow"></th></tr></thead><tbody id="movies"></tbody></table></div>
 <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap"><select id="addMovie" style="max-width:420px"></select><button id="addBtn">Add movie</button></div>
 </section>
 
-<section><h2>Seat-map cinemas</h2><p class="small muted">Showtimes are read for <b>every</b> cinema. Seat maps take longer, so they're fetched only for the cinemas ticked here.</p><div class="cols" id="cinemas"></div></section>
+<section><h2>Seat-map cinemas</h2><p class="small muted">Showtimes are read for <b>every</b> cinema, and opening any showtime counts its seats live. These cinemas also get seat maps from the full seat refresh button below.</p><div class="cols" id="cinemas"></div></section>
 
 <section><h2>Screens</h2><p class="small muted">"Seat maps" off = skip seat maps for that screen. "Live" = refresh its seat maps every seats pass (others every 30 min).</p>
 <table><thead><tr><th>Screen</th><th>Seen at</th><th>Seat maps</th><th>Live</th></tr></thead><tbody id="screens"></tbody></table></section>
@@ -146,7 +214,7 @@ ol{margin:6px 0;padding-left:20px}code{background:var(--bg);border:1px solid var
 <p class="small muted">Publishes Seat Finder to <code>https://&lt;you&gt;.github.io/&lt;repo&gt;/</code> for friends. Your Mac keeps scanning and pushes fresh data every few minutes.</p>
 <ol class="small">
 <li>Create a <b>public</b> repository on github.com (e.g. <code>seat-finder</code>). Empty is fine.</li>
-<li>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>: Repository access → only that repo; Permissions → <b>Contents: Read and write</b>, <b>Pages: Read and write</b>.</li>
+<li>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>: Repository access → only that repo; Permissions → <b>Contents</b>, <b>Pages</b> and <b>Workflows</b>: Read and write (Workflows lets it install the backup scanner).</li>
 <li>Fill in below and press Connect. The token stays on this Mac (in <code>.secrets.json</code>).</li></ol>
 <div class="form"><label>GitHub username<input type="text" id="ghOwner" autocomplete="off"></label><label>Repository<input type="text" id="ghRepo" autocomplete="off"></label><label>Token<input type="password" id="ghToken" autocomplete="off" placeholder=""></label></div>
 <label class="chk"><input type="checkbox" id="ghOn"> Keep publishing</label>
@@ -264,7 +332,7 @@ $('ntfyTest').onclick=function(){save().then(function(){return post('/api/ntfy-t
 $('ghConnect').onclick=function(){
   $('ghMsg').textContent='Connecting…';
   save().then(function(){return post('/api/github',{owner:$('ghOwner').value,repo:$('ghRepo').value,token:$('ghToken').value})})
-  .then(function(r){$('ghToken').value=''; S.hasToken=true; S.config.github.enabled=true; $('ghOn').checked=true; $('ghMsg').innerHTML='<span class="ok">Published.</span> Your site: <a target="_blank" href="'+esc(r.url)+'">'+esc(r.url)+'</a> (first deploy takes 1–2 minutes)'+(r.private?' <span class="bad">The repo is private — make it public so friends can see it.</span>':'')})
+  .then(function(r){$('ghToken').value=''; S.hasToken=true; S.config.github.enabled=true; $('ghOn').checked=true; $('ghMsg').innerHTML='<span class="ok">Uploaded.</span> Your site: <a target="_blank" href="'+esc(r.url)+'">'+esc(r.url)+'</a>'+(r.pagesError?' <span class="bad">'+esc(r.pagesError)+'</span>':' (first deploy takes 1–2 minutes)')+(r.warning?' <span class="bad">'+esc(r.warning)+'</span>':'')+(r.private?' <span class="bad">The repo is private — make it public so friends can see it.</span>':'')})
   .catch(function(e){$('ghMsg').innerHTML='<span class="bad">'+esc(e.message)+'</span>'});
 };
 var was={};

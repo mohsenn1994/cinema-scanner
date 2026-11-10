@@ -102,6 +102,19 @@ async function premiereTask(task) {
     return { title, cinemas: allCinemas, showtimes, done };
   }
 
+  // Select one showtime and press "Choose Seats"; the caller waits for the page to change.
+  if (type === 'go') {
+    const t = targets[0];
+    if (!(await select(t))) return { ok: false, why: 'could not select' };
+    const tb = await waitFor(() => timeButtons().find((b) => btnText(b) === t.time), 5000);
+    if (!tb) return { ok: false, why: 'time not found' };
+    await click(tb, 600);
+    const go = await waitFor(() => [...document.querySelectorAll('button')].find((b) => norm(b.textContent) === 'chooseseats'), 5000);
+    if (!go) return { ok: false, why: 'no Choose Seats button' };
+    setTimeout(() => go.click(), 50);
+    return { ok: true };
+  }
+
   if (type === 'capture') {
     const urls = {};
     for (const s of targets) {

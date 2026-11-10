@@ -5,7 +5,11 @@ const SITE = 'https://egy.voxcinemas.com';
 
 function parseShowtimesInPage() {
   const sec = document.querySelector('#showtimes');
-  if (!sec) return { title: document.title, dates: [], cinemas: [], blocked: /access denied/i.test(document.body.innerText) };
+  if (!sec) {
+    // A real movie page always has a title and the booking section; a bot-check page has neither.
+    const realPage = !!document.querySelector('h1') && /vox/i.test(document.title);
+    return { title: document.title, dates: [], cinemas: [], blocked: !realPage || /access denied|request unsuccessful|incident id/i.test(document.body.innerText) };
+  }
   const dates = [...sec.querySelectorAll('nav.date-filter li')].map((li) => {
     const a = li.querySelector('a');
     return { label: li.textContent.trim().replace(/\s+/g, ' '), href: a ? a.href : null, current: !a };
@@ -62,7 +66,7 @@ async function load(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#showtimes', { timeout: 30000 }).catch(() => {});
   const data = await page.evaluate(parseShowtimesInPage);
-  if (data.blocked) throw new Error('VOX blocked the request (Access Denied). Try "headless": false in config.json.');
+  if (data.blocked) throw new Error(`VOX blocked the request (page "${String(data.title).slice(0, 60)}")`);
   return data;
 }
 

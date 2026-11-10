@@ -73,10 +73,21 @@ module.exports = {
 
   // Seats pass: click through to find seat-selection URLs for showtimes we don't have yet.
   async locateSeatPages(page, { ref, targets, budgetMs = 120000 }) {
-    if (!targets.length) return {};
-    await page.goto(movieUrl(ref), { waitUntil: 'domcontentloaded', timeout: 60000 });
-    const r = await page.evaluate(premiereTask, { type: 'capture', targets: targets.map((t) => ({ ...t.pick, key: t.key })), budgetMs });
-    return r.urls;
+    const urls = {};
+    const deadline = Date.now() + budgetMs;
+    for (const t of targets) {
+      if (Date.now() > deadline) break;
+      try {
+        await page.goto(movieUrl(ref), { waitUntil: 'domcontentloaded', timeout: 60000 });
+        const nav = page.waitForURL(/\/seats\//, { timeout: 25000 }).then(() => true, () => false);
+        // The click navigates away, which may end the in-page script early — that's expected.
+        const r = await page.evaluate(premiereTask, { type: 'go', targets: [{ ...t.pick, key: t.key }] }).catch(() => ({ ok: true }));
+        if (r.ok && (await nav)) urls[t.key] = page.url();
+      } catch (e) {
+        /* try the next one */
+      }
+    }
+    return urls;
   },
 
   async seatMap(page, s) {
@@ -98,7 +109,7 @@ module.exports = {
           if (!m || seen.has(m[2])) continue;
           let p = a;
           for (let i = 0; i < 5 && p.innerText.trim().split('\n').filter(Boolean).length < 2; i++) p = p.parentElement;
-          const parts = p.innerText.split('\n').map((x) => x.trim()).filter((x) => x && !/^(pre-?book|book now)$/i.test(x));
+          const parts = p.innerText.split('\n').map((x) => x.trim()).filter((x) => x && !/^(pre-?book|book now|get tickets?|book tickets?)$/i.test(x));
           seen.set(m[2], { id: m[2], title: parts[0] || m[2], comingSoon: !!m[1] });
         }
         return [...seen.values()];

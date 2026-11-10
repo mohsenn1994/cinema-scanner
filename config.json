@@ -77,6 +77,10 @@
     "server": "https://ntfy.sh",
     "topic": "seatfinder-10d6d53a3a"
   },
+  "trigger": {
+    "server": "https://ntfy.sh",
+    "topic": "seatfinder-scan-5e5589ee0315"
+  },
   "github": {
     "enabled": true,
     "owner": "mohsenn1994",

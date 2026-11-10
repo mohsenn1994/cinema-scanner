@@ -3,22 +3,23 @@
 Live showtimes and seats across **VOX**, **Scene** and **Premiere** cinemas in Egypt, with instant alerts when
 tickets go on sale and one-tap links to each cinema's seat selection.
 
-Your Mac does the scanning (cinema sites can't be read from a browser page directly):
+Nothing runs on a schedule. A small helper on your Mac does the work when someone uses the page:
 
-| Job | How often | What it does |
-|---|---|---|
-| Showtimes check | every 2 min | Reads every cinema, every published date. Spots tickets going on sale → alerts. |
-| Seat maps | every 10 min (and right after a sale opens) | Seat maps for your seat-map cinemas; premium screens first. |
-| Seat Finder page | always on | http://localhost:4848 (settings at /settings) |
+- **Check now** (button on the page) — reads every cinema's showtimes (~1–2 min), then counts seats for the
+  movie/cinemas/screen/day you're looking at.
+- **Opening a showtime** — counts that showtime's seats live (~10–20 s) and shows the seat map.
+
+Requests from the page travel through ntfy (free), so they work from the GitHub page and from friends' phones,
+as long as the Mac is awake. When it's off, the repo owner can run a check from GitHub: Actions → "Check showtimes"
+→ Run workflow.
 
 ## Install (or update)
     cd ~/Documents/vox-scanner
     bash install.sh
 
 ## Use
-- **Seat Finder** — double-click `Seat Finder.command` or open http://localhost:4848. Filter by movie, cinema,
-  screen, 2D/3D, date and time (all multi-select), set "seats together", tap **Book**. **Share** copies a link
-  that keeps your filters.
+- **Seat Finder** — double-click `Seat Finder.command` or open http://localhost:4848: pick a movie, choose
+  cinemas/screen/time, pick a showtime, tap **Book**. **Share** copies a link that keeps your choices.
 - **Settings** — `Scanner Settings.command` or http://localhost:4848/settings: movies to watch (including
   coming-soon ones), which cinemas get seat maps, phone alerts, publishing to GitHub.
 

@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seat Finder</title>
+<meta name="description" content="Showtimes and free seats across VOX, Scene and Premiere cinemas in Cairo, updated every few minutes.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='11' width='26' height='15' rx='4' fill='%23c2185b'/%3E%3Crect x='7' y='5' width='18' height='9' rx='3' fill='%23c2185b' opacity='.75'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5f4f2;--surface:#fff;--surface-2:#f9f8f6;--ink:#17161a;--ink-2:#4a4850;--muted:#77737d;--line:#e6e3df;--line-2:#d4d0ca;
+  --accent:#c2185b;--accent-ink:#fff;--accent-soft:#fbe7ef;
+  --plenty:#17803d;--plenty-soft:#e3f4e8;--filling:#a35c00;--filling-soft:#fdf0dc;--full:#b42318;--full-soft:#fde9e7;--off:#8a8690;--off-soft:#efedea;
+  --seat-free:#22a05a;--seat-prem:#c9971c;--seat-taken:#dcd8d2;--seat-best:#c2185b;
+  --vox:#1d4ed8;--scene:#7c3aed;--premiere:#b45309;
+  --radius:14px;--shadow:0 1px 2px rgba(20,18,24,.05),0 4px 14px rgba(20,18,24,.05);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111013;--surface:#1a191d;--surface-2:#212025;--ink:#eeedf1;--ink-2:#c4c1ca;--muted:#8f8b96;--line:#2c2a31;--line-2:#3c3a42;
+  --accent:#ef4f8b;--accent-ink:#1a0a11;--accent-soft:#3a1626;
+  --plenty:#4ade80;--plenty-soft:#14301f;--filling:#fbbf24;--filling-soft:#3a2a10;--full:#f87171;--full-soft:#3a1714;--off:#8f8b96;--off-soft:#26252a;
+  --seat-free:#34c472;--seat-prem:#e0b33a;--seat-taken:#3b3940;--seat-best:#ef4f8b;
+  --vox:#60a5fa;--scene:#a78bfa;--premiere:#f59e0b;--shadow:none;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+button,input{font:inherit;color:inherit}
+a{color:inherit}
+[hidden]{display:none!important}
+
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .in{max-width:1080px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:17px;letter-spacing:-.01em;margin-right:auto;white-space:nowrap}
+.status{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-2);padding:6px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);white-space:nowrap}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--plenty);flex:none}
+.status.warn i{background:var(--filling)}.status.bad i{background:var(--full)}.status.wait i{background:var(--off);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:8px 13px;font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.big{padding:13px 18px;font-size:16px;border-radius:12px;width:100%}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn:disabled{opacity:.65;cursor:default}
+.spin svg{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:620px){.hide-sm{display:none!important}.status{padding:8px;border:0;background:none}.status>span{display:none}.statusline{display:flex!important}}
+.statusline{display:none;align-items:center;gap:7px;font-size:13px;color:var(--ink-2);margin:-6px 0 14px}
+.statusline i{width:8px;height:8px;border-radius:50%;background:var(--plenty)}.statusline.warn i{background:var(--filling)}.statusline.bad i{background:var(--full)}.statusline.wait i{background:var(--off)}
+
+main{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
+.step{margin:0 0 22px}
+.step>h2{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.step>h2 b{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;letter-spacing:0}
+
+/* step 1: movies */
+.movies{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.movie{text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:var(--radius);padding:14px 16px;cursor:pointer;box-shadow:var(--shadow)}
+.movie:hover{border-color:var(--line-2)}
+.movie[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.movie .t{font-weight:700;font-size:16px;line-height:1.25}
+.movie .ms{margin-top:6px;font-size:13px;display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--off)}
+.dot.on{background:var(--plenty)}.dot.listed{background:var(--filling)}
+
+/* step 2: choices */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.summary{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;list-style:none}
+.summary::-webkit-details-marker{display:none}
+.summary .txt{flex:1;min-width:0;color:var(--ink-2);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.summary .txt b{color:var(--ink)}
+details[open] .summary{border-bottom:1px solid var(--line)}
+details[open] .summary .chev{transform:rotate(180deg)}
+.chev{transition:transform .15s;color:var(--muted);flex:none}
+.opts{padding:6px 16px 14px}
+.opt{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:start}
+.opt:last-child{border-bottom:0}
+.opt>label,.opt>.lbl{font-size:13px;font-weight:650;color:var(--ink-2);padding-top:6px}
+@media (max-width:620px){.opt{grid-template-columns:1fr;gap:6px}.opt>.lbl{padding-top:0}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line-2);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:550;cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.25;text-align:left}
+.chip:hover{border-color:var(--ink-2)}
+.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.chip small{opacity:.6;font-size:11px}
+.group{margin:0 0 8px}.group:last-child{margin:0}
+.glabel{font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px;display:flex;align-items:center;gap:6px}
+.tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 6px;border-radius:4px;color:#fff;line-height:1.2}
+.tag.vox{background:var(--vox)}.tag.scene{background:var(--scene)}.tag.premiere{background:var(--premiere)}
+@media (prefers-color-scheme:dark){.tag{color:#111}}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:var(--surface)}
+.stepper button{border:0;background:none;width:36px;height:34px;cursor:pointer;font-size:17px}
+.stepper output{min-width:30px;text-align:center;font-weight:700}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+
+/* step 3: times */
+.days{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin}
+.day{flex:none;border:1px solid var(--line-2);background:var(--surface);border-radius:12px;padding:7px 12px;cursor:pointer;text-align:center;min-width:76px}
+.day .w{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.04em}
+.day .d{font-weight:750;font-size:15px}
+.day .n{font-size:11px;color:var(--muted)}
+.day[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.day[aria-pressed=true] .w,.day[aria-pressed=true] .n{color:inherit;opacity:.75}
+.day.none{opacity:.5}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:4px 0 12px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.cinema{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin:0 0 10px;box-shadow:var(--shadow)}
+.cinema h3{margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.screenrow{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--line)}
+.screenrow:first-of-type{border-top:0;padding-top:0}
+.screenrow .sname{font-weight:700;font-size:14px;padding-top:9px}
+.screenrow .sname small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+@media (max-width:620px){.screenrow{grid-template-columns:1fr;gap:6px}.screenrow .sname{padding-top:0}}
+.times{display:flex;flex-wrap:wrap;gap:8px}
+.time{position:relative;border:1.5px solid transparent;border-radius:10px;padding:7px 12px;min-width:92px;cursor:pointer;text-align:left;line-height:1.2}
+.time .h{font-weight:750;font-size:15px;font-variant-numeric:tabular-nums}
+.time .f{font-size:11px;font-weight:600;margin-top:2px}
+.time.plenty{background:var(--plenty-soft);color:var(--plenty)}.time.plenty .h{color:var(--ink)}
+.time.filling{background:var(--filling-soft);color:var(--filling)}.time.filling .h{color:var(--ink)}
+.time.full{background:var(--full-soft);color:var(--full)}.time.full .h{color:var(--ink)}
+.time.open{background:var(--surface);border-color:var(--line-2);color:var(--ink-2)}.time.open .h{color:var(--ink)}
+.time.off{background:var(--off-soft);color:var(--off);border-style:dashed;border-color:var(--line-2)}.time.off .h{color:var(--muted)}
+.time:hover{border-color:currentColor}
+.time .new{position:absolute;top:-6px;right:-6px;background:var(--accent);color:var(--accent-ink);font-size:9px;font-weight:800;padding:2px 5px;border-radius:999px}
+.empty{background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--radius);padding:26px 20px;text-align:center;color:var(--ink-2)}
+.empty h3{margin:0 0 6px;color:var(--ink);font-size:17px}
+.empty p{margin:0 0 14px}
+
+/* detail sheet */
+dialog{border:0;border-radius:18px;padding:0;max-width:720px;width:calc(100% - 24px);background:var(--surface);color:var(--ink);box-shadow:0 24px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(10,8,14,.45)}
+@media (max-width:620px){dialog{margin:auto 0 0;width:100%;max-width:100%;border-radius:18px 18px 0 0;max-height:92vh}}
+.dh{display:flex;align-items:flex-start;gap:12px;padding:18px 18px 8px}
+.dh h3{margin:0;font-size:18px;line-height:1.25}
+.dh .sub{color:var(--ink-2);font-size:14px;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dh .x{margin-left:auto}
+.db{padding:6px 18px 18px;font-size:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 14px}
+.fact{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.fact .k{font-size:12px;color:var(--muted)}
+.fact .v{font-weight:700;font-size:16px;margin-top:2px}
+.fact .v.best{color:var(--accent)}
+.map{overflow-x:auto;padding:4px 0 6px;margin:0 0 12px}
+.screen{margin:0 auto 12px;width:72%;height:16px;border-top:3px solid var(--line-2);border-radius:50% 50% 0 0/14px 14px 0 0;text-align:center;font-size:10px;letter-spacing:.35em;color:var(--muted);padding-top:2px}
+.seats{display:inline-flex;flex-direction:column;gap:3px;min-width:100%;align-items:center}
+.srow{display:flex;gap:3px;align-items:center}
+.srow b{width:16px;font-size:10px;color:var(--muted);text-align:center;font-weight:600}
+.s{width:12px;height:12px;border-radius:3px 3px 2px 2px;flex:none;background:var(--seat-taken)}
+.s.g{background:transparent}.s.f{background:var(--seat-free)}.s.p{background:var(--seat-prem)}
+.s.b{background:var(--seat-best);outline:2px solid var(--seat-best);outline-offset:1px}
+.mlegend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);justify-content:center;margin:0 0 16px}
+.mlegend span{display:inline-flex;align-items:center;gap:5px}
+.note{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink-2);margin:0 0 12px}
+.cats{margin:0 0 12px;padding-left:18px;color:var(--ink-2)}
+.dlg code{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
+.toggle{display:flex;align-items:center;gap:10px;cursor:pointer}
+.toggle input{appearance:none;width:38px;height:22px;border-radius:999px;background:var(--line-2);position:relative;cursor:pointer;flex:none;margin:0;transition:background .15s}
+.toggle input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.toggle input:checked{background:var(--accent)}.toggle input:checked::after{transform:translateX(16px)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;opacity:0;transition:all .2s;z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+footer{max-width:1080px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <div class="brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="11" width="26" height="15" rx="4" fill="var(--accent)"/><rect x="7" y="5" width="18" height="9" rx="3" fill="var(--accent)" opacity=".75"/></svg>Seat Finder</div>
+  <div class="status wait" id="status" role="status"><i></i><span>Loading…</span></div>
+  <button class="btn primary" id="checkBtn" type="button" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span>Check now</span></button>
+  <button class="btn hide-sm" id="shareBtn" type="button">Share</button>
+  <button class="btn" id="alertBtn" type="button" aria-label="Alerts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="hide-sm">Alerts</span></button>
+</div></div>
+
+<main>
+  <div class="statusline" id="statusline"></div>
+  <section class="step"><h2><b>1</b>Pick a movie</h2><div class="movies" id="movies"></div></section>
+  <section class="step" id="step2"><h2><b>2</b>Where &amp; how</h2><div id="choices"></div></section>
+  <section class="step" id="step3"><h2><b>3</b>Pick a showtime</h2><div id="times"></div></section>
+</main>
+<footer>Showtimes and free seats come from the VOX, Scene and Premiere websites and are refreshed every few minutes. “Book” opens the cinema’s own seat selection — you pick seats and pay there. Not affiliated with any cinema.</footer>
+
+<dialog id="sheet" class="dlg"></dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+'use strict';
+var SOURCE = {"type":"github","owner":"mohsenn1994","repo":"cinema-scanner","branch":"data"};
+var INLINE = null;
+var CHAINS = ['vox', 'scene', 'premiere'];
+var CHAIN = { vox: 'VOX', scene: 'Scene', premiere: 'Premiere' };
+var SLOTS = [
+  { id: 'morning', label: 'Morning', hint: 'before 12', test: function (k) { return k < 720; } },
+  { id: 'afternoon', label: 'Afternoon', hint: '12–5', test: function (k) { return k >= 720 && k < 1020; } },
+  { id: 'evening', label: 'Evening', hint: '5–9', test: function (k) { return k >= 1020 && k < 1260; } },
+  { id: 'night', label: 'Late', hint: 'after 9', test: function (k) { return k >= 1260; } }
+];
+var D = null, S = load(), open = {};
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+function uniq(a) { var o = {}, r = []; a.forEach(function (x) { if (!o[x]) { o[x] = 1; r.push(x); } }); return r; }
+function toast(m) { var t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(function () { t.classList.remove('on'); }, 2200); }
+function dayParts(iso) {
+  var d = new Date(iso + 'T12:00:00Z');
+  return { w: d.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }), d: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) };
+}
+function dayLabel(iso) { var p = dayParts(iso); return p.w + ' ' + p.d; }
+function ago(iso) {
+  if (!iso) return 'never';
+  var s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  return s < 90 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago';
+}
+var ckey = function (c) { return c.chain + ':' + c.name; };
+
+/* ---------- selections: saved per browser, shareable via the link ---------- */
+function blank() { return { movie: '', c: [], s: [], f: [], slot: [], n: 2, day: '' }; }
+function load() {
+  var h = location.hash.replace(/^#/, ''), st = blank();
+  if (h) {
+    h.split('&').forEach(function (p) {
+      var i = p.indexOf('='), k = p.slice(0, i), v = decodeURIComponent(p.slice(i + 1));
+      if (k === 'movie' || k === 'm') st.movie = v.split('|')[0];
+      else if (k === 'day') st.day = v;
+      else if (k === 'n') st.n = Math.max(1, Math.min(10, Number(v) || 2));
+      else if (['c', 's', 'f', 'slot'].indexOf(k) >= 0) st[k] = v ? v.split('|') : [];
+    });
+    return st;
+  }
+  try { var saved = JSON.parse(store.get('sf2') || 'null'); if (saved) return Object.assign(st, saved); } catch (e) {}
+  return st;
+}
+function save() {
+  var p = [];
+  if (S.movie) p.push('movie=' + encodeURIComponent(S.movie));
+  ['c', 's', 'f', 'slot'].forEach(function (k) { if (S[k].length) p.push(k + '=' + encodeURIComponent(S[k].join('|'))); });
+  if (S.n !== 2) p.push('n=' + S.n);
+  if (S.day) p.push('day=' + S.day);
+  history.replaceState(null, '', location.pathname + location.search + (p.length ? '#' + p.join('&') : ''));
+  store.set('sf2', JSON.stringify(S));
+}
+
+/* ---------- data ---------- */
+function fetchData() {
+  if (SOURCE && SOURCE.type === 'inline') return Promise.resolve(INLINE);
+  if (SOURCE && SOURCE.type === 'url') return fetch(SOURCE.url + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('status ' + r.status); return r.json(); });
+  if (SOURCE && SOURCE.type === 'github') {
+    var api = 'https://api.github.com/repos/' + SOURCE.owner + '/' + SOURCE.repo + '/contents/data.json?ref=' + encodeURIComponent(SOURCE.branch);
+    var raw = 'https://raw.githubusercontent.com/' + SOURCE.owner + '/' + SOURCE.repo + '/' + encodeURIComponent(SOURCE.branch) + '/data.json?t=' + Date.now();
+    var useRaw = Number(store.get('sf-rl') || 0) > Date.now();
+    return (useRaw ? fetch(raw, { cache: 'no-store' }) : fetch(api, { headers: { Accept: 'application/vnd.github.raw+json' }, cache: 'no-store' })).then(function (r) {
+      if (!useRaw && (r.status === 403 || r.status === 429)) { store.set('sf-rl', String(Date.now() + 15 * 60000)); return fetch(raw, { cache: 'no-store' }).then(function (x) { return x.json(); }); }
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
+    });
+  }
+  return fetch('data.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); });
+}
+var prevOnSale = null, newSet = {};
+function refresh(first) {
+  return fetchData().then(function (data) {
+    D = data && data.shows ? data : { shows: [], movies: (data && data.movies) || [], cinemas: [], screens: [], quickAt: data && data.quickAt };
+    // Keep seat counts that arrived live until the published data catches up.
+    D.shows.forEach(function (x) {
+      var l = liveSeats[x.u];
+      if (l && (!x.seat || Date.parse(x.seat.at) < Date.parse(l.seat.at))) { x.seat = l.seat; if (l.url) { x.url = l.url; x.direct = 1; } }
+    });
+    trackNew();
+    if (prevOnSale) notify(prevOnSale);
+    prevOnSale = {}; D.shows.forEach(function (s) { if (s.b) prevOnSale[s.u] = 1; });
+    render();
+  }).catch(function (e) {
+    if (first) { D = { shows: [], movies: [], cinemas: [], screens: [] }; render(); }
+    setStatus('bad', 'Can’t load data', 'Can’t load data — retrying');
+  });
+}
+function trackNew() {
+  var seen = {}, now = Date.now();
+  try { seen = JSON.parse(store.get('sf-seen') || '{}'); } catch (e) {}
+  var init = Number(store.get('sf-init') || 0); if (!init) { init = now; store.set('sf-init', String(now)); }
+  newSet = {};
+  D.shows.forEach(function (s) {
+    if (!s.b) return;
+    if (!seen[s.u]) seen[s.u] = now;
+    if (seen[s.u] > init + 60000 && now - seen[s.u] < 30 * 60000) newSet[s.u] = 1;
+  });
+  Object.keys(seen).forEach(function (k) { if (now - seen[k] > 2 * 86400000) delete seen[k]; });
+  store.set('sf-seen', JSON.stringify(seen));
+}
+function notify(was) {
+  if (store.get('sf-notify') !== '1' || !('Notification' in window) || Notification.permission !== 'granted') return;
+  var fresh = D.shows.filter(function (s) { return s.b && !was[s.u] && passes(s); });
+  if (!fresh.length) return;
+  var s = fresh[0], c = D.cinemas[s.c];
+  new Notification(D.movies[s.m].name + ' — tickets on sale', { body: c.chainLabel + ' ' + c.name + ' · ' + s.s + ' · ' + dayLabel(s.d) + ' ' + s.t + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ' more)' : ''), tag: 'sf-' + s.u });
+}
+
+/* ---------- Talking to the scanner computer ----------
+   Requests go to an ntfy topic the scanner computer listens on; answers come back on "<topic>-done". */
+var checking = null, seatReq = {}, es = null, liveSeats = {};
+// Who does the work: GitHub Actions (through the relay) if set up, otherwise the owner's Mac.
+function viaGitHub() { return !!(D && D.dispatch); }
+function canAsk() { return !!(D && (D.dispatch || D.trigger || (SOURCE && SOURCE.type === 'url'))); }
+function ask(body) {
+  if (viaGitHub()) return fetch(D.dispatch, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  if (SOURCE && SOURCE.type === 'url') return fetch('/api/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return fetch(D.trigger.server.replace(/\/$/, '') + '/' + encodeURIComponent(D.trigger.topic), { method: 'POST', body: JSON.stringify(body) });
+}
+function listen() {
+  if (es || !D || !D.trigger || !window.EventSource) return;
+  es = new EventSource(D.trigger.server.replace(/\/$/, '') + '/' + encodeURIComponent(D.trigger.topic + '-done') + '/sse');
+  es.onmessage = function (e) {
+    var m; try { m = JSON.parse(JSON.parse(e.data).message); } catch (x) { return; }
+    onReply(m);
+  };
+}
+function onReply(m) {
+  if (m.kind === 'started') {
+    if (checking && (m.id === checking.id || (checking.any && m.what === 'check'))) { checking.started = true; updateCheckBtn(); }
+    if (seatReq[m.uid || ''] || Object.keys(seatReq).some(function (u) { return seatReq[u].id === m.id; })) { /* seat check started */ }
+  } else if (m.kind === 'times' && checking && (m.id === checking.id || checking.any)) {
+    checking.stage = 'seats'; updateCheckBtn();
+    refresh(false).then(function () { toast('Showtimes updated — now counting seats'); });
+  } else if (m.kind === 'done' && checking && (m.id === checking.id || checking.any)) {
+    checking = null; updateCheckBtn();
+    refresh(false).then(function () { toast('Seats updated'); });
+  } else if (m.kind === 'seat') {
+    var r = seatReq[m.uid];
+    if (!r || r.id !== m.id) return;
+    clearTimeout(r.timer);
+    var s = showByUid(m.uid);
+    if (m.error) { r.error = m.error; r.done = true; }
+    else if (s) {
+      if (m.partial && s.seat && s.seat.rows) m.seat.rows = null;
+      s.seat = m.partial ? Object.assign({}, m.seat, { rows: null }) : m.seat;
+      if (m.url) { s.url = m.url; s.direct = 1; }
+      liveSeats[m.uid] = { seat: s.seat, url: m.url };
+      r.done = true;
+      bestCache = {};
+    }
+    renderTimes();
+    if ($('sheet').open && $('sheet').dataset.u === m.uid) openShow(m.uid, true);
+  }
+}
+function showByUid(u) { for (var i = 0; i < D.shows.length; i++) if (D.shows[i].u === u) return D.shows[i]; return null; }
+function updateCheckBtn() {
+  var b = $('checkBtn');
+  b.hidden = !canAsk();
+  var label = !checking ? 'Check now' : !checking.started ? 'Asking…' : checking.stage === 'seats' ? 'Counting seats…' : 'Checking…';
+  b.disabled = !!checking; b.classList.toggle('spin', !!checking); b.querySelector('span').textContent = label;
+}
+function checkNow() {
+  if (checking || !canAsk()) return;
+  var id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  checking = { id: id, asked: Date.now() };
+  updateCheckBtn(); listen();
+  ask({ type: 'check', id: id, focus: S.movie ? { movie: S.movie, c: S.c, s: S.s, f: S.f, slot: S.slot, day: S.day } : null }).then(function (r) {
+    if (r && r.already && checking && checking.id === id) { checking.any = true; checking.started = true; updateCheckBtn(); toast('A check is already running — showing its results'); }
+    if (r && r.error && checking && checking.id === id) { checking = null; updateCheckBtn(); showNote('Couldn’t start a check', esc(r.error)); }
+  }).catch(function () {});
+  toast(viaGitHub() ? 'Checking every cinema — about 2–4 minutes' : 'Checking every cinema — about 1–2 minutes');
+  var before = D.quickAt;
+  // If the answers channel isn't available, fall back to watching the data.
+  var tries = 0;
+  (function poll() {
+    setTimeout(function () {
+      if (!checking || checking.id !== id) return;
+      tries++;
+      if (tries === (viaGitHub() ? 15 : 3) && !checking.started && (D.trigger || D.dispatch)) {
+        checking = null; updateCheckBtn();
+        showNote('No answer yet', viaGitHub() ? 'GitHub hasn’t started the check yet — it can take a few minutes when GitHub is busy. Try again shortly.' : 'Checks run on the owner’s Mac, which looks asleep or offline right now. Try again later.');
+        return;
+      }
+      refresh(false).then(function () {
+        if (checking && checking.id === id && !D.trigger && D.quickAt !== before) { checking = null; updateCheckBtn(); toast('Updated just now'); return; }
+        if (tries > 50) { checking = null; updateCheckBtn(); return; }
+        poll();
+      });
+    }, 10000);
+  })();
+}
+function countSeats(s) {
+  if (!canAsk() || !s.b) return;
+  var r = seatReq[s.u];
+  if (r && !r.done && Date.now() - r.at < 240000) return; // already asking
+  if (r && r.done && !r.error && Date.now() - r.at < 60000) return; // just counted
+  var id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  seatReq[s.u] = { id: id, at: Date.now() };
+  listen();
+  ask({ type: 'seats', id: id, uid: s.u }).catch(function () {});
+  seatReq[s.u].timer = setTimeout(function () {
+    var x = seatReq[s.u];
+    if (x && x.id === id && !x.done) { x.done = true; x.error = viaGitHub() ? 'GitHub didn’t answer in time — try again.' : 'No answer from the scanner computer — it may be asleep.'; if ($('sheet').open && $('sheet').dataset.u === s.u) openShow(s.u, true); }
+  }, viaGitHub() ? 240000 : 90000);
+}
+function showNote(title, html) {
+  $('sheet').dataset.u = '';
+  $('sheet').innerHTML = '<div class="dh"><h3>' + esc(title) + '</h3><button class="btn ghost x" type="button" data-close aria-label="Close">✕</button></div><div class="db"><p>' + html + '</p></div>';
+  if (!$('sheet').open) $('sheet').showModal();
+}
+
+/* ---------- status ---------- */
+function setStatus(kind, short, long) {
+  var el = $('status');
+  el.className = 'status ' + kind;
+  el.innerHTML = '<i></i><span>' + esc(short) + (long ? '<span class="long"> ' + esc(long) + '</span>' : '') + '</span>';
+  el.title = short + (long ? ' ' + long : '');
+  var sl = $('statusline');
+  sl.className = 'statusline ' + kind;
+  sl.innerHTML = '<i></i>' + esc(short + (long ? ' ' + long : ''));
+}
+function updateStatus() {
+  if (!D) return;
+  updateCheckBtn();
+  if (!D.quickAt) return setStatus('wait', 'No check yet', '— press Check now');
+  var age = (Date.now() - Date.parse(D.quickAt)) / 60000;
+  setStatus(age < 15 ? '' : 'warn', 'Last checked ' + ago(D.quickAt), '');
+}
+
+/* ---------- logic ---------- */
+function movieIdx() { for (var i = 0; i < D.movies.length; i++) if (D.movies[i].name === S.movie) return i; return -1; }
+function slotOf(k) { for (var i = 0; i < SLOTS.length; i++) if (SLOTS[i].test(k)) return SLOTS[i].id; return ''; }
+function passes(s, skip) {
+  var c = D.cinemas[s.c];
+  if (skip !== 'm' && D.movies[s.m].name !== S.movie) return false;
+  if (skip !== 'c' && S.c.length && S.c.indexOf(ckey(c)) < 0) return false;
+  if (skip !== 's' && S.s.length && S.s.indexOf(s.s) < 0) return false;
+  if (skip !== 'f' && S.f.length && S.f.indexOf(s.f) < 0) return false;
+  if (skip !== 'slot' && S.slot.length && S.slot.indexOf(slotOf(s.k)) < 0) return false;
+  return true;
+}
+var bestCache = {};
+function best(seat, n) {
+  var key = seat.at + '|' + n + '|' + seat.free;
+  if (bestCache[key] !== undefined) return bestCache[key];
+  var rows = seat.rows, width = 0, cols = [], b = null;
+  rows.forEach(function (r) { width = Math.max(width, r.c.length); for (var i = 0; i < r.c.length; i++) if (r.c[i] !== ' ') cols.push(i); });
+  var center = cols.reduce(function (a, x) { return a + x; }, 0) / (cols.length || 1);
+  rows.forEach(function (r, ri) {
+    var depth = rows.length > 1 ? ri / (rows.length - 1) : .5;
+    for (var ci = 0; ci + n <= r.c.length; ci++) {
+      var ok = true;
+      for (var j = 0; j < n; j++) { var ch = r.c[ci + j]; if (ch !== '1' && ch !== 'v') { ok = false; break; } }
+      if (!ok) continue;
+      var score = Math.abs(ci + (n - 1) / 2 - center) / Math.max(width, 1) + 1.2 * Math.abs(depth - .65);
+      if (!b || score < b.score) b = { score: score, row: ri, col: ci };
+    }
+  });
+  if (b) {
+    var r = rows[b.row], nums = r.n.split(','), idx = 0; b.labels = [];
+    for (var i = 0; i < r.c.length; i++) { if (r.c[i] === ' ') continue; if (i >= b.col && i < b.col + n) b.labels.push(r.r + '-' + nums[idx]); idx++; }
+  }
+  return (bestCache[key] = b);
+}
+var FRESH = 45 * 60000; // seat counts older than this aren't used for colours
+function freshSeat(s) { return s.seat && Date.now() - Date.parse(s.seat.at) < FRESH ? s.seat : null; }
+function level(s) {
+  if (!s.b) return 'off';
+  var seat = freshSeat(s);
+  if (!seat) return 'open';
+  if (seat.rows && !best(seat, S.n)) return 'full';
+  var pct = seat.total ? seat.free / seat.total : 0;
+  return pct >= .4 ? 'plenty' : pct >= .12 ? 'filling' : 'full';
+}
+function levelText(s) {
+  if (!s.b) return 'Not on sale';
+  var seat = freshSeat(s);
+  if (!seat) return 'Tap for seats';
+  return seat.free + ' seat' + (seat.free === 1 ? '' : 's') + ' left';
+}
+
+/* ---------- render ---------- */
+function render() {
+  updateStatus();
+  if (movieIdx() < 0) {
+    var firstOn = D.movies.filter(function (m) { return m.status === 'on-sale'; })[0] || D.movies[0];
+    S.movie = firstOn ? firstOn.name : '';
+  }
+  renderMovies(); renderChoices(); renderTimes(); save();
+}
+
+function renderMovies() {
+  if (!D.movies.length) { $('movies').innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>No movies yet</h3><p>The scanner hasn’t reported anything yet. This page updates itself.</p></div>'; return; }
+  $('movies').innerHTML = D.movies.map(function (m, i) {
+    var shows = D.shows.filter(function (s) { return s.m === i; });
+    var on = shows.filter(function (s) { return s.b; });
+    var cins = uniq(on.map(function (s) { return s.c; })).length;
+    var st = on.length ? '<i class="dot on"></i>On sale at ' + cins + ' cinema' + (cins === 1 ? '' : 's') : shows.length ? '<i class="dot listed"></i>Listed — not on sale yet' : '<i class="dot"></i>Not on sale yet';
+    return '<button type="button" class="movie" data-movie="' + esc(m.name) + '" aria-pressed="' + (m.name === S.movie) + '"><div class="t">' + esc(m.name) + '</div><div class="ms">' + st + '</div></button>';
+  }).join('');
+}
+
+function chip(group, value, label, on, extra) {
+  return '<button type="button" class="chip" data-g="' + group + '" data-v="' + esc(value) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + label + (extra || '') + '</button>';
+}
+function renderChoices() {
+  var mi = movieIdx();
+  $('step2').hidden = mi < 0;
+  if (mi < 0) return;
+  var mine = D.shows.filter(function (s) { return s.m === mi; });
+  if (!mine.length) { $('choices').innerHTML = ''; $('step2').hidden = true; return; }
+  // Only offer what this movie actually has.
+  var cinemaIds = uniq(mine.map(function (s) { return s.c; }));
+  var screens = uniq(mine.map(function (s) { return s.s; })).sort(function (a, b) { var p = /standard|regular/i; return (p.test(a) - p.test(b)) || a.localeCompare(b); });
+  var formats = uniq(mine.map(function (s) { return s.f; })).sort();
+  S.c = S.c.filter(function (k) { return cinemaIds.some(function (i) { return ckey(D.cinemas[i]) === k; }); });
+  S.s = S.s.filter(function (x) { return screens.indexOf(x) >= 0; });
+  S.f = S.f.filter(function (x) { return formats.indexOf(x) >= 0; });
+
+  var groups = CHAINS.map(function (ch) {
+    var list = cinemaIds.map(function (i) { return D.cinemas[i]; }).filter(function (c) { return c.chain === ch; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    if (!list.length) return '';
+    return '<div class="group"><div class="glabel"><span class="tag ' + ch + '">' + CHAIN[ch] + '</span></div><div class="chips">' +
+      list.map(function (c) { return chip('c', ckey(c), esc(c.name), S.c.indexOf(ckey(c)) >= 0); }).join('') + '</div></div>';
+  }).join('');
+  var sum = [
+    S.c.length ? '<b>' + S.c.length + ' cinema' + (S.c.length > 1 ? 's' : '') + '</b>' : '<b>All cinemas</b>',
+    S.s.length ? '<b>' + esc(S.s.join(', ')) + '</b>' : 'any screen',
+    S.f.length ? '<b>' + esc(S.f.join('/')) + '</b>' : '',
+    S.slot.length ? '<b>' + esc(S.slot.map(function (id) { return SLOTS.filter(function (x) { return x.id === id; })[0].label; }).join(', ')) + '</b>' : 'any time',
+    '<b>' + S.n + ' seat' + (S.n > 1 ? 's' : '') + '</b> together'
+  ].filter(Boolean).join(' · ');
+  var openNow = open.choices !== undefined ? open.choices : window.innerWidth > 720;
+  $('choices').innerHTML = '<details class="panel" id="choicesBox"' + (openNow ? ' open' : '') + '><summary class="summary"><span class="txt">' + sum + '</span><span class="btn">Change</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary><div class="opts">' +
+    '<div class="opt"><div class="lbl">Cinemas</div><div>' + groups + '<p class="hint">Nothing ticked = all cinemas.</p></div></div>' +
+    '<div class="opt"><div class="lbl">Screen</div><div class="chips">' + screens.map(function (x) { return chip('s', x, esc(x), S.s.indexOf(x) >= 0); }).join('') + '</div></div>' +
+    (formats.length > 1 ? '<div class="opt"><div class="lbl">2D / 3D</div><div class="chips">' + formats.map(function (x) { return chip('f', x, esc(x), S.f.indexOf(x) >= 0); }).join('') + '</div></div>' : '') +
+    '<div class="opt"><div class="lbl">Time of day</div><div class="chips">' + SLOTS.map(function (x) { return chip('slot', x.id, esc(x.label), S.slot.indexOf(x.id) >= 0, ' <small>' + x.hint + '</small>'); }).join('') + '</div></div>' +
+    '<div class="opt"><div class="lbl">Seats together</div><div><span class="stepper"><button type="button" data-step="-1" aria-label="Fewer">−</button><output>' + S.n + '</output><button type="button" data-step="1" aria-label="More">+</button></span><p class="hint">Shows the best ' + S.n + ' seats side by side for each showtime.</p></div></div>' +
+    '</div></details>';
+}
+
+function renderTimes() {
+  var mi = movieIdx(), el = $('times');
+  if (mi < 0) { el.innerHTML = ''; return; }
+  var m = D.movies[mi];
+  var all = D.shows.filter(function (s) { return s.m === mi; });
+  if (!all.length) {
+    el.innerHTML = '<div class="empty"><h3>' + esc(m.name) + ' isn’t on sale yet</h3><p>' + (D.quickAt ? 'We check VOX, Scene and Premiere every few minutes. Turn on alerts to hear the moment booking opens.' : 'The scanner is starting up. Results appear here in a few minutes.') + '</p><button class="btn primary" type="button" data-alerts>Get alerts</button></div>';
+    return;
+  }
+  var list = all.filter(function (s) { return passes(s); });
+  if (!list.length) {
+    el.innerHTML = '<div class="empty"><h3>Nothing matches these choices</h3><p>Try more cinemas, another screen or any time of day.</p><button class="btn" type="button" data-clear>Show everything</button></div>';
+    return;
+  }
+  var days = uniq(list.map(function (s) { return s.d; })).sort();
+  if (days.indexOf(S.day) < 0) {
+    var firstOn = days.filter(function (d) { return list.some(function (s) { return s.d === d && s.b; }); })[0];
+    S.day = firstOn || days[0];
+  }
+  var tabs = '<div class="days" role="tablist">' + days.map(function (d) {
+    var n = list.filter(function (s) { return s.d === d && s.b; }).length, p = dayParts(d);
+    return '<button type="button" class="day' + (n ? '' : ' none') + '" role="tab" data-day="' + d + '" aria-pressed="' + (d === S.day) + '"><div class="w">' + p.w + '</div><div class="d">' + p.d + '</div><div class="n">' + (n ? n + ' on sale' : 'not yet') + '</div></button>';
+  }).join('') + '</div>';
+  var legend = '<div class="legend"><span><i style="background:var(--plenty)"></i>Plenty left</span><span><i style="background:var(--filling)"></i>Filling up</span><span><i style="background:var(--full)"></i>Almost full</span><span><i style="background:var(--surface);border:1px solid var(--line-2)"></i>On sale — tap to count seats</span><span><i style="background:var(--off-soft);border:1px dashed var(--line-2)"></i>Not on sale yet</span></div>';
+
+  var today = list.filter(function (s) { return s.d === S.day; });
+  var byCinema = {};
+  today.forEach(function (s) { (byCinema[s.c] = byCinema[s.c] || []).push(s); });
+  var cards = Object.keys(byCinema).map(Number).sort(function (a, b) {
+    var ca = D.cinemas[a], cb = D.cinemas[b];
+    var oa = byCinema[a].some(function (s) { return s.b; }), ob = byCinema[b].some(function (s) { return s.b; });
+    return (ob - oa) || CHAINS.indexOf(ca.chain) - CHAINS.indexOf(cb.chain) || ca.name.localeCompare(cb.name);
+  }).map(function (ci) {
+    var c = D.cinemas[ci], shows = byCinema[ci], rows = {};
+    shows.forEach(function (s) { var k = s.s + (s.f !== '2D' ? ' ' + s.f : ''); (rows[k] = rows[k] || []).push(s); });
+    return '<div class="cinema"><h3><span class="tag ' + c.chain + '">' + CHAIN[c.chain] + '</span>' + esc(c.name) + '</h3>' + Object.keys(rows).sort().map(function (k) {
+      var r = rows[k].sort(function (a, b) { return a.k - b.k; });
+      return '<div class="screenrow"><div class="sname">' + esc(k) + '</div><div class="times">' + r.map(function (s) {
+        return '<button type="button" class="time ' + level(s) + '" data-u="' + esc(s.u) + '"><div class="h">' + esc(s.t) + '</div><div class="f">' + esc(levelText(s)) + '</div>' + (newSet[s.u] ? '<span class="new">NEW</span>' : '') + '</button>';
+      }).join('') + '</div></div>';
+    }).join('') + '</div>';
+  }).join('');
+  el.innerHTML = tabs + legend + cards;
+}
+
+/* ---------- detail sheet ---------- */
+function seatMap(s) {
+  if (!s.seat.rows) return '';
+  var b = best(s.seat, S.n), html = '<div class="map"><div class="screen">SCREEN</div><div class="seats">';
+  s.seat.rows.forEach(function (r, ri) {
+    html += '<div class="srow"><b>' + esc(r.r) + '</b>';
+    var nums = r.n.split(','), idx = 0;
+    for (var i = 0; i < r.c.length; i++) {
+      var ch = r.c[i];
+      if (ch === ' ') { html += '<i class="s g"></i>'; continue; }
+      var label = r.r + '-' + nums[idx++], isBest = b && b.row === ri && i >= b.col && i < b.col + S.n;
+      html += '<i class="s ' + (isBest ? 'b' : ch === '1' ? 'f' : ch === 'v' ? 'p' : '') + '" title="' + esc(label) + (ch === '0' || ch === 'w' ? ' · taken' : '') + '"></i>';
+    }
+    html += '<b>' + esc(r.r) + '</b></div>';
+  });
+  return html + '</div></div><div class="mlegend"><span><i class="s f"></i>Free</span><span><i class="s p"></i>Premium</span><span><i class="s"></i>Taken</span><span><i class="s b"></i>Best ' + S.n + ' together</span></div>';
+}
+function openShow(u, isUpdate) {
+  var s = showByUid(u); if (!s) return;
+  var c = D.cinemas[s.c], m = D.movies[s.m], body = '';
+  if (!isUpdate) countSeats(s);
+  var r = seatReq[u] || {}, counting = s.b && r.id && !r.done;
+  if (!s.b) {
+    body = '<div class="note">Listed by the cinema but <b>not on sale yet</b>. Press <b>Check now</b> to look again, or turn on alerts.</div><button class="btn big primary" type="button" data-alerts>Get alerts</button>';
+  } else {
+    var seat = s.seat, fresh = freshSeat(s), b = seat && seat.rows ? best(seat, S.n) : null;
+    var big = seat
+      ? '<div class="v" style="font-size:28px">' + seat.free + ' <span style="font-size:15px;font-weight:600;color:var(--muted)">of ' + seat.total + ' seats left</span></div>'
+      : '<div class="v">' + (counting ? 'Counting…' : canAsk() ? '—' : 'See on ' + CHAIN[c.chain]) + '</div>';
+    var when = counting ? '<span class="spin" style="display:inline-flex;vertical-align:-3px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg></span> Counting live seats…' + (viaGitHub() ? ' <span style="color:var(--muted)">(about 1 minute)</span>' : '')
+      : r.error ? '<span style="color:var(--full)">' + esc(r.error) + '</span>'
+      : seat ? 'Counted ' + ago(seat.at) + (fresh ? '' : ' — may have changed') : '';
+    body += '<div class="facts"><div class="fact" style="grid-column:1/-1"><div class="k">Seats left</div>' + big + '<div class="k" style="margin-top:4px">' + when + '</div></div>' +
+      (seat && seat.rows ? '<div class="fact"><div class="k">Best ' + S.n + ' together</div><div class="v best">' + (b ? esc(b.labels.join(', ')) : 'None left') + '</div></div>' : '') +
+      (seat && seat.cats && seat.cats.some(function (x) { return x.p; }) ? '<div class="fact"><div class="k">Prices</div><div style="font-size:13px;margin-top:4px">' + seat.cats.filter(function (x) { return x.p; }).map(function (x) { return esc(x.n) + ': ' + esc(x.p); }).join('<br>') + '</div></div>' : '') +
+      '</div>';
+    if (seat && seat.rows) body += seatMap(s);
+    if (!s.direct) body += '<div class="note">On Premiere’s page choose: <b>' + esc(c.name) + '</b> → <b>' + esc(dayLabel(s.d)) + '</b> → <b>' + esc(s.s) + '</b> → <b>' + esc(s.t) + '</b></div>';
+    body += '<a class="btn big primary" href="' + esc(s.url) + '" target="_blank" rel="noopener">' + (s.direct ? 'Book on ' + CHAIN[c.chain] + ' →' : 'Open Premiere →') + '</a>';
+  }
+  var sheet = $('sheet');
+  sheet.dataset.u = u;
+  sheet.innerHTML = '<div class="dh"><div><h3>' + esc(m.name) + '</h3><div class="sub"><span class="tag ' + c.chain + '">' + CHAIN[c.chain] + '</span>' + esc(c.name) + ' · ' + esc(s.s) + (s.f !== '2D' ? ' ' + esc(s.f) : '') + ' · <b>' + esc(dayLabel(s.d)) + ', ' + esc(s.t) + '</b></div></div><button class="btn ghost x" type="button" data-close aria-label="Close">✕</button></div><div class="db">' + body + '</div>';
+  if (!sheet.open) sheet.showModal();
+}
+function openAlerts() {
+  var a = D && D.alerts, b = '';
+  if (a) {
+    var url = a.server.replace(/\/$/, '') + '/' + encodeURIComponent(a.topic), official = /\/\/ntfy\.sh$/.test(a.server.replace(/\/$/, ''));
+    b += '<p><b>On your phone</b> — works even when this page is closed:</p><ol><li>Install the free <b>ntfy</b> app (App Store / Google Play).</li><li>Tap <b>+</b> and subscribe to <code>' + esc(a.topic) + '</code>' + (official ? '' : ' on server <code>' + esc(a.server) + '</code>') + '.</li></ol><p class="hint">You’ll get a notification the moment tickets go on sale. <a href="' + esc(url) + '" target="_blank" rel="noopener">Open in browser</a></p><hr style="border:0;border-top:1px solid var(--line);margin:14px 0">';
+  }
+  var ok = 'Notification' in window, on = ok && store.get('sf-notify') === '1' && Notification.permission === 'granted';
+  b += '<p><b>In this browser</b> — while this page is open, for your current choices.</p>' + (ok ? '<label class="toggle"><input type="checkbox" id="notifyT"' + (on ? ' checked' : '') + '> Notify me here</label>' : '<p class="hint">This browser doesn’t support notifications.</p>');
+  b += '<p class="hint" style="margin-top:14px">Tip: stay signed in on VOX, Scene and Premiere with your card saved — checkout then takes seconds.</p>';
+  $('sheet').innerHTML = '<div class="dh"><h3>Get alerted when tickets go on sale</h3><button class="btn ghost x" type="button" data-close aria-label="Close">✕</button></div><div class="db">' + b + '</div>';
+  $('sheet').showModal();
+}
+
+/* ---------- events ---------- */
+function toggle(arr, v) { var i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v); }
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-movie],[data-g],[data-step],[data-day],[data-u],[data-alerts],[data-clear],[data-close]');
+  if (!t) { if (e.target === $('sheet')) $('sheet').close(); return; }
+  if (t.dataset.movie !== undefined) { if (S.movie !== t.dataset.movie) { S.movie = t.dataset.movie; S.day = ''; } render(); }
+  else if (t.dataset.g) { toggle(S[t.dataset.g], t.dataset.v); renderKeepOpen(); }
+  else if (t.dataset.step) { S.n = Math.max(1, Math.min(10, S.n + Number(t.dataset.step))); renderKeepOpen(); }
+  else if (t.dataset.day) { S.day = t.dataset.day; renderTimes(); save(); }
+  else if (t.dataset.u) openShow(t.dataset.u);
+  else if (t.hasAttribute('data-alerts')) openAlerts();
+  else if (t.hasAttribute('data-clear')) { S.c = []; S.s = []; S.f = []; S.slot = []; render(); }
+  else if (t.hasAttribute('data-close')) $('sheet').close();
+});
+function renderKeepOpen() { var d = $('choicesBox'); open.choices = d ? d.open : undefined; renderChoices(); renderTimes(); save(); }
+document.addEventListener('toggle', function (e) { if (e.target.id === 'choicesBox') open.choices = e.target.open; }, true);
+document.addEventListener('change', function (e) {
+  if (e.target.id !== 'notifyT') return;
+  var t = e.target;
+  if (t.checked) Notification.requestPermission().then(function (p) { var ok = p === 'granted'; store.set('sf-notify', ok ? '1' : '0'); t.checked = ok; toast(ok ? 'Notifications on' : 'Blocked by the browser'); });
+  else { store.set('sf-notify', '0'); toast('Notifications off'); }
+});
+$('alertBtn').onclick = openAlerts;
+$('checkBtn').onclick = checkNow;
+$('shareBtn').onclick = function () {
+  save();
+  if (navigator.share && /Mobi/.test(navigator.userAgent)) navigator.share({ title: 'Seat Finder', url: location.href }).catch(function () {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(function () { toast('Link copied — it opens with your choices'); });
+};
+window.addEventListener('hashchange', function () { S = load(); if (D) render(); });
+
+refresh(true).then(function () {
+  listen();
+  var every = SOURCE && SOURCE.type === 'github' ? 75000 : SOURCE && SOURCE.type === 'inline' ? 0 : 30000;
+  if (every) setInterval(function () { if (!document.hidden && !$('sheet').open) refresh(false); }, every);
+  else setInterval(function () { if (!document.hidden && !$('sheet').open) location.reload(); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && every) refresh(false); });
+  setInterval(updateStatus, 20000);
+});
+})();
+</script>
+</body>
+</html>

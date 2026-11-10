@@ -32,7 +32,7 @@ const STATUS = path.join(DIR, '.scan-status.json');
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
 const CI = !!process.env.GITHUB_ACTIONS; // running as the GitHub Actions backup
-const MODE = flag('--seat') ? 'seat' : flag('--quick') ? 'quick' : flag('--seats') ? 'seats' : flag('--discover') ? 'discover' : 'both';
+const MODE = flag('--publish') ? 'publish' : flag('--seat') ? 'seat' : flag('--quick') ? 'quick' : flag('--seats') ? 'seats' : flag('--discover') ? 'discover' : 'both';
 fs.mkdirSync(STATE_DIR, { recursive: true });
 
 // Bot protection (VOX uses Akamai) rejects headless Chrome. We hide the giveaways: the "HeadlessChrome"
@@ -442,14 +442,16 @@ async function seatsPass(cfg, opts = {}) {
 }
 
 // ---------- outputs: data.json, report.html, GitHub ----------
-async function publish(cfg, prevData) {
+let PREV_DATA = null; // last published data (GitHub mode keeps seat maps from earlier runs through it)
+async function publish(cfg, prevData = PREV_DATA) {
   const data = buildData(cfg, { site: siteUrl(cfg), scannedBy: CI ? 'backup' : 'mac' }, prevData);
   if (!CI) fs.writeFileSync(REPORT, renderUi('file', { cfg, data }));
   if (cfg.github && cfg.github.enabled) {
     try {
       if (!CI) await publishSite(cfg, renderUi('github', { cfg }));
       const { token, ...safeCfg } = cfg; // never publish secrets
-      if (await publishData(cfg, data, { 'quick.json': readJson(QUICK, null), 'config.json': safeCfg })) log('published data to GitHub');
+      const seatPages = (readJson(SEATS, {}).premiereUrls) || {};
+      if (await publishData(cfg, data, { 'quick.json': readJson(QUICK, null), 'config.json': safeCfg, 'seat-pages.json': seatPages })) log('published data to GitHub');
       status({ publish: { ok: true, at: new Date().toISOString() } });
     } catch (e) {
       log('GitHub publish failed:', e.message);
@@ -470,6 +472,7 @@ async function main() {
     await new Promise((r) => ctx.on('close', r));
     return;
   }
+  if (MODE === 'publish') return publish(cfg); // settings changed: push them (and the page) to GitHub
   if (MODE === 'discover') {
     const ctx = await launch('.browser-profile-quick', cfg.headless);
     try {
@@ -479,22 +482,26 @@ async function main() {
     }
     return;
   }
-  watchdog(MODE === 'seat' ? 4 : MODE === 'quick' ? 12 : 25);
-  if (MODE === 'seat') return liveSeat(cfg, argVal('--seat'), argVal('--reply'));
+  watchdog(MODE === 'seat' ? 5 : MODE === 'quick' ? 14 : 25);
   const replyId = argVal('--reply');
-  let prevData = null;
   if (CI) {
-    // Backup mode: only work when the Mac has gone quiet, using the Mac's settings and state.
+    // GitHub Actions mode: use the settings and last results stored on the repo's data branch.
     const shared = await readShared({ github: {} }, 'data.json');
     const age = shared && shared.quickAt ? (Date.now() - Date.parse(shared.quickAt)) / 60000 : Infinity;
-    if (age < Number(process.env.BACKUP_AFTER_MINUTES || 12) && !flag('--force')) return log(`data is ${Math.round(age)} min old — the Mac is scanning, nothing to do`);
+    if (MODE !== 'seat' && age < Number(process.env.BACKUP_AFTER_MINUTES || 12) && !flag('--force')) return log(`data is ${Math.round(age)} min old — nothing to do`);
     const sharedCfg = await readShared({ github: {} }, 'config.json');
-    if (sharedCfg) Object.assign(cfg, sharedCfg, { headless: true, macNotification: false, github: { ...sharedCfg.github, enabled: true } });
+    // Runs under a virtual display (xvfb) as a normal Chrome window, which bot checks accept more readily.
+    if (sharedCfg) Object.assign(cfg, sharedCfg, { headless: !process.env.DISPLAY, macNotification: false, github: { ...sharedCfg.github, enabled: true } });
+    else cfg.headless = !process.env.DISPLAY;
     const q = await readShared(cfg, 'quick.json');
     if (q) writeJson(QUICK, q);
-    prevData = shared;
-    log(`backup scan: last data ${isFinite(age) ? Math.round(age) + ' min' : 'never'} old`);
+    const pages = await readShared(cfg, 'seat-pages.json');
+    if (pages) writeJson(SEATS, { seats: {}, premiereUrls: pages });
+    PREV_DATA = shared;
+    log(`GitHub check: last data ${isFinite(age) ? Math.round(age) + ' min' : 'never'} old`);
   }
+  if (MODE === 'seat') return liveSeat(cfg, argVal('--seat'), replyId);
+  const prevData = PREV_DATA;
   if (replyId) await reply(cfg, { kind: 'started', id: replyId, what: 'check' });
   if (MODE === 'quick' || MODE === 'both') await quickPass(cfg);
   if (MODE === 'seats' || MODE === 'both') await seatsPass(cfg);
@@ -506,7 +513,7 @@ async function main() {
     focus = JSON.parse(argVal('--focus') || 'null');
   } catch {}
   const filter = focusFilter(focus);
-  if (filter && !CI) {
+  if (filter) {
     await seatsPass(cfg, { filter, cap: 24, maxAgeMs: 3 * 60000 });
     await publish(cfg, prevData);
   }

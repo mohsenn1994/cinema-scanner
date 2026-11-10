@@ -61,7 +61,11 @@ const server = http.createServer((req, res) => {
   req.on('end', async () => {
     try {
       const data = body ? JSON.parse(body) : {};
-      if (p === '/api/config') return send(res, 200, { config: saveConfig(data) });
+      if (p === '/api/config') {
+        const saved = saveConfig(data);
+        if (saved.github && saved.github.enabled) run(['--publish']); // so GitHub runs and the page see the new settings
+        return send(res, 200, { config: saved });
+      }
       if (p === '/api/request') {
         handleRequest(JSON.stringify(data));
         return send(res, 200, { ok: true });
@@ -219,6 +223,9 @@ ol{margin:6px 0;padding-left:20px}code{background:var(--bg);border:1px solid var
 <div class="form"><label>GitHub username<input type="text" id="ghOwner" autocomplete="off"></label><label>Repository<input type="text" id="ghRepo" autocomplete="off"></label><label>Token<input type="password" id="ghToken" autocomplete="off" placeholder=""></label></div>
 <label class="chk"><input type="checkbox" id="ghOn"> Keep publishing</label>
 <p><button class="primary" id="ghConnect" type="button">Connect &amp; publish</button> <span id="ghMsg" class="small"></span></p>
+<h2 style="margin-top:18px">Run checks on GitHub (no Mac needed)</h2>
+<p class="small muted">With a free Cloudflare relay, <b>Check now</b> and live seat counts run on GitHub Actions instead of this Mac. Set it up once (see <code>cloudflare-worker.js</code> for the steps), paste its address here and Save.</p>
+<div class="form"><label>Relay address<input type="text" id="dispatchUrl" placeholder="https://seat-finder.yourname.workers.dev"></label></div>
 </section>
 
 <section><h2>Options</h2><div class="opts">
@@ -311,6 +318,7 @@ function renderScreens(){
 function renderOpts(){
   ['days','partySize'].forEach(function(k){$(k).value=S.config[k]});['fetchSeatMaps','macNotification'].forEach(function(k){$(k).checked=!!S.config[k]});
   $('ntfyOn').checked=!!S.config.ntfy.enabled; $('ntfyTopic').value=S.config.ntfy.topic||'${randomTopic()}'; $('ntfyServer').value=S.config.ntfy.server;
+  $('dispatchUrl').value=S.config.dispatchUrl||'';
   $('ghOwner').value=S.config.github.owner||''; $('ghRepo').value=S.config.github.repo||''; $('ghOn').checked=!!S.config.github.enabled;
   $('ghToken').placeholder=S.hasToken?'saved — leave empty to keep':'github_pat_…';
   if(S.config.github.enabled&&S.config.github.owner) $('ghMsg').innerHTML='Live at <a target="_blank" href="https://'+esc(S.config.github.owner)+'.github.io/'+esc(S.config.github.repo)+'/">'+esc(S.config.github.owner)+'.github.io/'+esc(S.config.github.repo)+'</a>';
@@ -318,6 +326,7 @@ function renderOpts(){
 function readOpts(){
   S.config.days=Math.max(0,Number($('days').value)||0);S.config.partySize=Number($('partySize').value)||2;['fetchSeatMaps','macNotification'].forEach(function(k){S.config[k]=$(k).checked});
   S.config.ntfy={enabled:$('ntfyOn').checked,topic:$('ntfyTopic').value.trim(),server:$('ntfyServer').value.trim()||'https://ntfy.sh'};
+  S.config.dispatchUrl=$('dispatchUrl').value.trim();
   S.config.github.owner=$('ghOwner').value.trim(); S.config.github.repo=$('ghRepo').value.trim(); S.config.github.enabled=$('ghOn').checked;
 }
 function render(){renderMovies();renderCinemas();renderScreens();renderOpts();}

@@ -1,31 +1,56 @@
-# Manual check from GitHub — for when the Mac is off. Open the repo's Actions tab →
-# "Check showtimes" → Run workflow. Nothing runs on a schedule.
+# Seat Finder checks, run by GitHub — no Mac needed.
+# Started by the "Check now" button / opening a showtime on the page (through the small Cloudflare
+# relay), or by hand: Actions → "Check showtimes" → Run workflow. Nothing runs on a schedule.
 name: Check showtimes
+run-name: ${{ inputs.type == 'seats' && 'Seats' || 'Check' }} ${{ inputs.id }}
 
 on:
   workflow_dispatch:
+    inputs:
+      type:
+        description: "check = all showtimes; seats = one showtime's seats"
+        default: check
+      id:
+        description: Request id (lets the page match the answer)
+        default: ''
+      uid:
+        description: Showtime id (for type=seats)
+        default: ''
+      focus:
+        description: JSON of what the page is showing (movie, cinemas, screen, day)
+        default: ''
 
 permissions:
   contents: write
 
+# Full checks queue up one at a time; seat counts run alongside.
 concurrency:
-  group: check-showtimes
+  group: seatfinder-${{ inputs.type == 'seats' && inputs.uid || 'check' }}
   cancel-in-progress: false
 
 jobs:
-  scan:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' # use the Google Chrome that GitHub's runners already have
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: package*.json
       - name: Install
         run: |
-          npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          command -v xvfb-run >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq xvfb)
+      - name: Count seats
+        if: inputs.type == 'seats'
+        run: xvfb-run -a node scan.js --seat "${{ inputs.uid }}" --reply "${{ inputs.id }}"
       - name: Check showtimes
+        if: inputs.type != 'seats'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scan.js --quick --force
+          FOCUS: ${{ inputs.focus }}
+        run: xvfb-run -a node scan.js --quick --force ${{ inputs.id && format('--reply {0}', inputs.id) || '' }} ${FOCUS:+--focus "$FOCUS"}

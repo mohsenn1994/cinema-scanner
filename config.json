@@ -81,6 +81,7 @@
     "server": "https://ntfy.sh",
     "topic": "seatfinder-scan-5e5589ee0315"
   },
+  "dispatchUrl": "",
   "github": {
     "enabled": true,
     "owner": "mohsenn1994",

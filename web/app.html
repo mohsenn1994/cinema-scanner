@@ -300,8 +300,11 @@ function notify(was) {
 /* ---------- Talking to the scanner computer ----------
    Requests go to an ntfy topic the scanner computer listens on; answers come back on "<topic>-done". */
 var checking = null, seatReq = {}, es = null, liveSeats = {};
-function canAsk() { return !!(D && (D.trigger || (SOURCE && SOURCE.type === 'url'))); }
+// Who does the work: GitHub Actions (through the relay) if set up, otherwise the owner's Mac.
+function viaGitHub() { return !!(D && D.dispatch); }
+function canAsk() { return !!(D && (D.dispatch || D.trigger || (SOURCE && SOURCE.type === 'url'))); }
 function ask(body) {
+  if (viaGitHub()) return fetch(D.dispatch, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   if (SOURCE && SOURCE.type === 'url') return fetch('/api/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return fetch(D.trigger.server.replace(/\/$/, '') + '/' + encodeURIComponent(D.trigger.topic), { method: 'POST', body: JSON.stringify(body) });
 }
@@ -315,12 +318,12 @@ function listen() {
 }
 function onReply(m) {
   if (m.kind === 'started') {
-    if (checking && m.id === checking.id) { checking.started = true; updateCheckBtn(); }
+    if (checking && (m.id === checking.id || (checking.any && m.what === 'check'))) { checking.started = true; updateCheckBtn(); }
     if (seatReq[m.uid || ''] || Object.keys(seatReq).some(function (u) { return seatReq[u].id === m.id; })) { /* seat check started */ }
-  } else if (m.kind === 'times' && checking && m.id === checking.id) {
+  } else if (m.kind === 'times' && checking && (m.id === checking.id || checking.any)) {
     checking.stage = 'seats'; updateCheckBtn();
     refresh(false).then(function () { toast('Showtimes updated — now counting seats'); });
-  } else if (m.kind === 'done' && checking && m.id === checking.id) {
+  } else if (m.kind === 'done' && checking && (m.id === checking.id || checking.any)) {
     checking = null; updateCheckBtn();
     refresh(false).then(function () { toast('Seats updated'); });
   } else if (m.kind === 'seat') {
@@ -353,8 +356,11 @@ function checkNow() {
   var id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   checking = { id: id, asked: Date.now() };
   updateCheckBtn(); listen();
-  ask({ type: 'check', id: id, focus: S.movie ? { movie: S.movie, c: S.c, s: S.s, f: S.f, slot: S.slot, day: S.day } : null }).catch(function () {});
-  toast('Checking every cinema — about 1–2 minutes');
+  ask({ type: 'check', id: id, focus: S.movie ? { movie: S.movie, c: S.c, s: S.s, f: S.f, slot: S.slot, day: S.day } : null }).then(function (r) {
+    if (r && r.already && checking && checking.id === id) { checking.any = true; checking.started = true; updateCheckBtn(); toast('A check is already running — showing its results'); }
+    if (r && r.error && checking && checking.id === id) { checking = null; updateCheckBtn(); showNote('Couldn’t start a check', esc(r.error)); }
+  }).catch(function () {});
+  toast(viaGitHub() ? 'Checking every cinema — about 2–4 minutes' : 'Checking every cinema — about 1–2 minutes');
   var before = D.quickAt;
   // If the answers channel isn't available, fall back to watching the data.
   var tries = 0;
@@ -362,14 +368,14 @@ function checkNow() {
     setTimeout(function () {
       if (!checking || checking.id !== id) return;
       tries++;
-      if (tries === 3 && !checking.started && D.trigger) {
+      if (tries === (viaGitHub() ? 15 : 3) && !checking.started && (D.trigger || D.dispatch)) {
         checking = null; updateCheckBtn();
-        showNote('The scanner computer didn’t answer', 'Checks run on the owner’s Mac, which looks asleep or offline right now. Try again later' + (D.repo ? ' — or the owner can <a href="' + esc(D.repo) + '/actions/workflows/backup-scan.yml" target="_blank" rel="noopener">run a check on GitHub</a>' : '') + '.');
+        showNote('No answer yet', viaGitHub() ? 'GitHub hasn’t started the check yet — it can take a few minutes when GitHub is busy. Try again shortly.' : 'Checks run on the owner’s Mac, which looks asleep or offline right now. Try again later.');
         return;
       }
       refresh(false).then(function () {
         if (checking && checking.id === id && !D.trigger && D.quickAt !== before) { checking = null; updateCheckBtn(); toast('Updated just now'); return; }
-        if (tries > 40) { checking = null; updateCheckBtn(); return; }
+        if (tries > 50) { checking = null; updateCheckBtn(); return; }
         poll();
       });
     }, 10000);
@@ -378,7 +384,7 @@ function checkNow() {
 function countSeats(s) {
   if (!canAsk() || !s.b) return;
   var r = seatReq[s.u];
-  if (r && !r.done && Date.now() - r.at < 90000) return; // already asking
+  if (r && !r.done && Date.now() - r.at < 240000) return; // already asking
   if (r && r.done && !r.error && Date.now() - r.at < 60000) return; // just counted
   var id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   seatReq[s.u] = { id: id, at: Date.now() };
@@ -386,8 +392,8 @@ function countSeats(s) {
   ask({ type: 'seats', id: id, uid: s.u }).catch(function () {});
   seatReq[s.u].timer = setTimeout(function () {
     var x = seatReq[s.u];
-    if (x && x.id === id && !x.done) { x.done = true; x.error = 'No answer from the scanner computer — it may be asleep.'; if ($('sheet').open && $('sheet').dataset.u === s.u) openShow(s.u, true); }
-  }, 90000);
+    if (x && x.id === id && !x.done) { x.done = true; x.error = viaGitHub() ? 'GitHub didn’t answer in time — try again.' : 'No answer from the scanner computer — it may be asleep.'; if ($('sheet').open && $('sheet').dataset.u === s.u) openShow(s.u, true); }
+  }, viaGitHub() ? 240000 : 90000);
 }
 function showNote(title, html) {
   $('sheet').dataset.u = '';
@@ -600,7 +606,7 @@ function openShow(u, isUpdate) {
     var big = seat
       ? '<div class="v" style="font-size:28px">' + seat.free + ' <span style="font-size:15px;font-weight:600;color:var(--muted)">of ' + seat.total + ' seats left</span></div>'
       : '<div class="v">' + (counting ? 'Counting…' : canAsk() ? '—' : 'See on ' + CHAIN[c.chain]) + '</div>';
-    var when = counting ? '<span class="spin" style="display:inline-flex;vertical-align:-3px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg></span> Counting live seats…'
+    var when = counting ? '<span class="spin" style="display:inline-flex;vertical-align:-3px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg></span> Counting live seats…' + (viaGitHub() ? ' <span style="color:var(--muted)">(about 1 minute)</span>' : '')
       : r.error ? '<span style="color:var(--full)">' + esc(r.error) + '</span>'
       : seat ? 'Counted ' + ago(seat.at) + (fresh ? '' : ' — may have changed') : '';
     body += '<div class="facts"><div class="fact" style="grid-column:1/-1"><div class="k">Seats left</div>' + big + '<div class="k" style="margin-top:4px">' + when + '</div></div>' +
